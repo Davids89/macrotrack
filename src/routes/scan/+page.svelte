@@ -8,6 +8,7 @@
 	import { fmt, toNumber } from '$lib/format';
 	import FoodForm from '$lib/components/FoodForm.svelte';
 	import { Card, CardContent } from '$lib/components/ui/card';
+	import { Badge } from '$lib/components/ui/badge';
 	import { Button } from '$lib/components/ui/button';
 	import { Input } from '$lib/components/ui/input';
 	import { Label } from '$lib/components/ui/label';
@@ -24,7 +25,7 @@
 	let allowDuplicate = $state(false);
 	let grams = $state(100);
 	let errorMsg = $state('');
-	let added = $state<string | null>(null);
+	let added = $state<{ name: string; kind: 'catalog' | 'diary' } | null>(null);
 	let manualCode = $state('');
 	const edited = $state({ name: '', brand: '', kcal: '', protein: '', carbs: '', fat: '', fiber: '' });
 	const manual = $state({ name: '', brand: '', kcal: '', protein: '', carbs: '', fat: '', fiber: '' });
@@ -100,7 +101,7 @@
 			const existing = await db.foods.where('barcode').equals(code).first();
 			if (!existing) throw new Error('No se pudo guardar el producto');
 		}
-		added = food.name;
+		added = { name: food.name, kind: 'catalog' };
 	}
 
 	async function addFromOff() {
@@ -125,7 +126,7 @@
 	async function addFromLocal() {
 		if (!localFood) return;
 		await diary.addFood(localFood, grams);
-		added = localFood.name;
+		added = { name: localFood.name, kind: 'diary' };
 		resetResult();
 	}
 
@@ -198,7 +199,11 @@
 {#if added}
 	<Card>
 		<CardContent class="flex flex-col gap-2">
-			<p class="font-semibold">«{added}» guardado en tu base de datos ✓ <a class="text-primary underline-offset-4 hover:underline" href="/">Ir al diario</a></p>
+			{#if added.kind === 'diary'}
+				<p class="font-semibold">«{added.name}» añadido al diario ✓ <a class="text-primary underline-offset-4 hover:underline" href="/">Ir al diario</a></p>
+			{:else}
+				<p class="font-semibold">«{added.name}» guardado en tu base de datos ✓ <a class="text-primary underline-offset-4 hover:underline" href="/foods">Ver en alimentos</a></p>
+			{/if}
 			<Button variant="outline" onclick={() => (added = null)}>Escanear otro</Button>
 		</CardContent>
 	</Card>
@@ -222,7 +227,10 @@
 				</div>
 				<Button variant="outline" onclick={resetResult}>Cancelar</Button>
 			{:else if localFood}
-				<h2 class="text-base font-semibold">{localFood.name}</h2>
+				<div class="flex flex-wrap items-center gap-2">
+					<h2 class="text-base font-semibold">{localFood.name}</h2>
+					<Badge variant="secondary">Ya en tu base de datos</Badge>
+				</div>
 				{#if localFood.brand}<p class="text-sm text-muted-foreground">{localFood.brand}</p>{/if}
 				{#if localFood.imageUrl}
 					<img class="h-18 w-18 rounded-lg object-cover" src={localFood.imageUrl} alt="" />
