@@ -4,6 +4,7 @@
 	import { db, type Food } from '$lib/db';
 	import { diary } from '$lib/stores.svelte';
 	import { fetchProductByBarcode, offToFood, type OffProduct } from '$lib/openfoodfacts';
+	import { findFoodMatch } from '$lib/foodmatch';
 	import { fmt, toNumber } from '$lib/format';
 	import FoodForm from '$lib/components/FoodForm.svelte';
 	import { Card, CardContent } from '$lib/components/ui/card';
@@ -19,6 +20,8 @@
 	let code = $state('');
 	let localFood: Food | null = $state(null);
 	let offProduct: OffProduct | null = $state(null);
+	let duplicateFood = $state<Food | null>(null);
+	let allowDuplicate = $state(false);
 	let grams = $state(100);
 	let errorMsg = $state('');
 	let added = $state<string | null>(null);
@@ -129,6 +132,15 @@
 	async function addManual() {
 		const name = manual.name.trim();
 		if (!name) return;
+		if (!allowDuplicate) {
+			const match = findFoodMatch(await db.foods.toArray(), name, manual.brand.trim() || undefined);
+			if (match) {
+				duplicateFood = match;
+				return;
+			}
+		}
+		allowDuplicate = false;
+		duplicateFood = null;
 		await saveFood({
 			name,
 			barcode: code.trim() || undefined,
@@ -144,6 +156,11 @@
 		});
 		Object.assign(manual, { name: '', brand: '', kcal: '', protein: '', carbs: '', fat: '', fiber: '' });
 		resetResult();
+	}
+
+	function createDuplicate() {
+		allowDuplicate = true;
+		void addManual();
 	}
 
 	function resetResult() {
@@ -239,6 +256,15 @@
 		<h2 class="text-base font-semibold">Añadir manualmente</h2>
 		<p class="text-sm text-muted-foreground">Si el producto no tiene código de barras o no se encuentra, rellena los datos:</p>
 		<FoodForm values={manual} placeholders />
+		{#if duplicateFood}
+			<div class="rounded-lg border border-border bg-secondary p-3 text-sm">
+				<p>Ya existe «{duplicateFood.name}»{#if duplicateFood.brand} · {duplicateFood.brand}{/if} en tu base de datos.</p>
+				<div class="mt-2 flex flex-wrap gap-2">
+					<Button variant="outline" size="sm" href="/foods">Ver en alimentos</Button>
+					<Button size="sm" onclick={createDuplicate}>Crear igualmente</Button>
+				</div>
+			</div>
+		{/if}
 		<Button onclick={addManual} disabled={!manual.name.trim()}>Guardar en base de datos</Button>
 	</CardContent>
 </Card>

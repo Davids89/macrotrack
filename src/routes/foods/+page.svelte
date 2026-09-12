@@ -1,7 +1,8 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
-	import { db, type Food } from '$lib/db';
+	import { deleteFood, db, type Food } from '$lib/db';
 	import { fmt, fold, toNumber } from '$lib/format';
+	import { findFoodMatch } from '$lib/foodmatch';
 	import { searchProducts, type OffSearchResult } from '$lib/openfoodfacts';
 	import ConfirmDialog from '$lib/components/ConfirmDialog.svelte';
 	import { sortFavoritesFirst } from '$lib/favorites';
@@ -28,6 +29,9 @@
 	let offResults = $state<OffSearchResult[]>([]);
 	let savedOff = $state<Set<number>>(new Set());
 	let confirmFood = $state<Food | null>(null);
+	let usage = $state<Map<number, number>>(new Map());
+	let duplicate = $state<Food | null>(null);
+	let allowDuplicate = $state(false);
 	const form = $state({
 		name: '',
 		brand: '',
@@ -54,17 +58,41 @@
 		new Set(foods.map((food) => food.barcode).filter((barcode): barcode is string => Boolean(barcode)))
 	);
 
-	onMount(async () => {
-		foods = await db.foods.orderBy('name').toArray();
+	onMount(() => {
+		void refresh();
 	});
 
 	async function refresh() {
-		foods = await db.foods.orderBy('name').toArray();
+		const [rows, entries] = await Promise.all([db.foods.orderBy('name').toArray(), db.entries.toArray()]);
+		const counts = new Map<number, number>();
+		for (const entry of entries) {
+			if (entry.foodId === undefined) continue;
+			counts.set(entry.foodId, (counts.get(entry.foodId) ?? 0) + 1);
+		}
+		foods = rows;
+		usage = counts;
+	}
+
+	function usageCount(food: Food): number {
+		return food.id === undefined ? 0 : (usage.get(food.id) ?? 0);
+	}
+
+	function usedIn(food: Food): string {
+		const count = usageCount(food);
+		if (count === 0) return 'Sin usar';
+		return count === 1 ? 'Usado en 1 comida' : `Usado en ${count} comidas`;
+	}
+
+	function deleteMessage(food: Food | null): string {
+		if (!food) return '';
+		const count = usageCount(food);
+		if (count === 0) return `¿Eliminar «${food.name}» de tu base de datos? Esta acción no se puede deshacer.`;
+		return `«${food.name}» se usa en ${count} ${count === 1 ? 'comida' : 'comidas'}. Tus comidas se conservarán; solo se elimina del catálogo.`;
 	}
 
 	async function remove(food: Food) {
 		if (food.id === undefined) return;
-		await db.foods.delete(food.id);
+		await deleteFood(food.id);
 		await refresh();
 	}
 
@@ -90,6 +118,15 @@
 			fiber: toNumber(form.fiber) || 0
 		};
 		formError = '';
+		duplicate = null;
+		if (editingId === null && !allowDuplicate) {
+			const match = findFoodMatch(foods, name, form.brand.trim() || undefined);
+			if (match) {
+				duplicate = match;
+				return;
+			}
+		}
+		allowDuplicate = false;
 		try {
 			if (editingId !== null) {
 				await db.foods.update(editingId, data);
@@ -109,6 +146,8 @@
 
 	function edit(food: Food) {
 		editingId = food.id ?? null;
+		duplicate = null;
+		allowDuplicate = false;
 		Object.assign(form, {
 			name: food.name,
 			brand: food.brand ?? '',
@@ -128,7 +167,18 @@
 	function cancel() {
 		editingId = null;
 		formError = '';
+		duplicate = null;
+		allowDuplicate = false;
 		showForm = false;
+	}
+
+	function editDuplicate() {
+		if (duplicate) edit(duplicate);
+	}
+
+	function createAnyway() {
+		allowDuplicate = true;
+		void save();
 	}
 
 	async function search() {
@@ -231,6 +281,15 @@
 						<Input type="text" bind:value={form.protein} inputmode="decimal" />
 					</div>
 				</div>
+				{#if duplicate}
+					<div class="rounded-lg border border-border bg-secondary p-3 text-sm">
+						<p>Ya existe «{duplicate.name}»{#if duplicate.brand} · {duplicate.brand}{/if}. {usedIn(duplicate)}.</p>
+						<div class="mt-2 flex flex-wrap gap-2">
+							<Button variant="outline" size="sm" onclick={editDuplicate}>Editar existente</Button>
+							<Button size="sm" onclick={createAnyway}>Crear igualmente</Button>
+						</div>
+					</div>
+				{/if}
 				<Button onclick={save}>{editingId !== null ? 'Guardar cambios' : 'Guardar'}</Button>
 			</div>
 		{/if}
@@ -292,6 +351,7 @@
 								{#if food.barcode}<span>{food.barcode} · </span>{/if}
 								{fmt(food.kcal)} kcal · G {fmt(food.fat)} · C {fmt(food.carbs)} · F {fmt(food.fiber)} · P {fmt(food.protein)} / {food.base}g{#if food.unitSize} · 1 ud = {fmt(food.unitSize)} g{/if}{#if food.source !== 'builtin'} · {food.source}{/if}
 							</small>
+							<small class="text-xs text-muted-foreground">{usedIn(food)}</small>
 						</div>
 						<div class="flex shrink-0 gap-1.5">
 							<Button
@@ -328,7 +388,7 @@
 <ConfirmDialog
 	open={confirmFood !== null}
 	title="Eliminar alimento"
-	message={'¿Eliminar «' + (confirmFood?.name ?? '') + '» de tu base de datos? Esta acción no se puede deshacer.'}
+	message={deleteMessage(confirmFood)}
 	onConfirm={async () => {
 		if (confirmFood) await remove(confirmFood);
 	}}

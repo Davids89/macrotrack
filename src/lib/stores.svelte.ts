@@ -124,12 +124,11 @@ class DiaryStore {
 		let data: Partial<Entry> = { grams, mealType: patch.mealType ?? entry.mealType };
 		if (patch.units !== undefined) data = { ...data, units: patch.units };
 		if (patch.grams !== undefined) {
-			if (entry.foodId) {
-				const food = await db.foods.get(entry.foodId);
-				if (food) data = { ...data, ...foodAtGrams(food, grams) };
-			} else {
-				data = { ...data, ...scaleTotals(entry, grams, entry.grams) };
-			}
+			const food = entry.foodId !== undefined ? await db.foods.get(entry.foodId) : undefined;
+			data = {
+				...data,
+				...(food ? foodAtGrams(food, grams) : scaleTotals(entry, grams, entry.grams))
+			};
 		}
 		await db.entries.update(id, data);
 		await this.load();

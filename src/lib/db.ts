@@ -113,3 +113,15 @@ export async function setDaysComplete(dates: string[], complete: boolean) {
 		await db.completedDays.bulkPut(dates.map((date) => ({ date })));
 	});
 }
+
+export async function deleteFood(id: number) {
+	await db.transaction('rw', db.foods, db.entries, async () => {
+		await db.entries
+			.where('foodId')
+			.equals(id)
+			.modify((entry) => {
+				delete entry.foodId;
+			});
+		await db.foods.delete(id);
+	});
+}
