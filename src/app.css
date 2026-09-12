@@ -71,6 +71,11 @@
 		@apply border-border outline-ring/50;
 	}
 
+	/* Desactiva pinch y doble-pulsación; el scroll vertical y los gestos horizontales de JS siguen disponibles. */
+	html {
+		touch-action: pan-y;
+	}
+
 	body {
 		@apply bg-background text-foreground;
 	}

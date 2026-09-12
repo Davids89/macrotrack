@@ -37,6 +37,18 @@
 		for (const tab of tabs) {
 			preloadData(tab.href).catch(() => {});
 		}
+
+		// iOS Safari ignora user-scalable=no: bloquea el zoom por pinza con sus eventos propios.
+		const preventGesture = (event: Event) => event.preventDefault();
+		document.addEventListener('gesturestart', preventGesture, { passive: false });
+		document.addEventListener('gesturechange', preventGesture, { passive: false });
+		document.addEventListener('gestureend', preventGesture, { passive: false });
+
+		return () => {
+			document.removeEventListener('gesturestart', preventGesture);
+			document.removeEventListener('gesturechange', preventGesture);
+			document.removeEventListener('gestureend', preventGesture);
+		};
 	});
 </script>
 
