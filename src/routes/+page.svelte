@@ -63,6 +63,29 @@
 	let showHelper = $state(false);
 	let addOpen = $state(false);
 	let addMealType = $state<MealType>(suggestMealType());
+	let viewport = $state({ top: 0, height: 0 });
+
+	// Con el teclado abierto iOS desplaza el viewport visual y descuadra el diálogo fijo.
+	$effect(() => {
+		if (!addOpen || typeof window === 'undefined' || !window.visualViewport) return;
+		const vv = window.visualViewport;
+		const update = () => {
+			viewport = { top: vv.offsetTop, height: vv.height };
+		};
+		update();
+		vv.addEventListener('resize', update);
+		vv.addEventListener('scroll', update);
+		return () => {
+			vv.removeEventListener('resize', update);
+			vv.removeEventListener('scroll', update);
+		};
+	});
+
+	const dialogStyle = $derived(
+		viewport.height > 0
+			? `top: ${viewport.top + viewport.height / 2}px; max-height: ${viewport.height - 32}px;`
+			: undefined
+	);
 
 	function openAdd(mealType?: MealType) {
 		addMealType = mealType ?? suggestMealType();
@@ -285,7 +308,7 @@
 </div>
 
 <Dialog.Root bind:open={addOpen}>
-	<Dialog.Content class="max-h-[85dvh] overflow-y-auto">
+	<Dialog.Content class="overflow-y-auto overscroll-contain" style={dialogStyle}>
 		<Dialog.Header>
 			<Dialog.Title>Añadir alimento</Dialog.Title>
 		</Dialog.Header>
