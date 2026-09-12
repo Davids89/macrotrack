@@ -8,6 +8,10 @@
 	import * as Select from '$lib/components/ui/select';
 	import { Select as SelectPrimitive } from 'bits-ui';
 	import StarIcon from '@lucide/svelte/icons/star';
+	import HistoryIcon from '@lucide/svelte/icons/history';
+
+	const RECENT_DAYS = 7;
+	const RECENT_LIMIT = 6;
 
 	let {
 		onAdd,
@@ -32,18 +36,40 @@
 		return sortFavoritesFirst(foods.filter((food) => fold(food.name).includes(q))).slice(0, 8);
 	});
 
-	const favorites = $derived(
-		foods
-			.filter((food) => food.favorite)
-			.sort((a, b) => a.name.localeCompare(b.name, 'es'))
-			.slice(0, 6)
-	);
+	let recentFoods = $state<Food[]>([]);
 
 	$effect(() => {
 		let cancelled = false;
-		db.foods.toArray().then((all) => {
-			if (!cancelled) foods = all;
-		});
+		(async () => {
+			const start = new Date();
+			start.setDate(start.getDate() - (RECENT_DAYS - 1));
+			const [all, entries] = await Promise.all([
+				db.foods.toArray(),
+				db.entries
+					.where('date')
+					.between(start.toLocaleDateString('en-CA'), new Date().toLocaleDateString('en-CA'), true, true)
+					.toArray()
+			]);
+			if (cancelled) return;
+			foods = all;
+			const usage = new Map<number, { count: number; last: string }>();
+			for (const entry of entries) {
+				if (entry.foodId === undefined) continue;
+				const current = usage.get(entry.foodId);
+				if (current) {
+					current.count += 1;
+					current.last = entry.date;
+				} else {
+					usage.set(entry.foodId, { count: 1, last: entry.date });
+				}
+			}
+			const byId = new Map(all.map((food) => [food.id!, food]));
+			recentFoods = [...usage.entries()]
+				.sort((a, b) => b[1].count - a[1].count || b[1].last.localeCompare(a[1].last))
+				.map(([id]) => byId.get(id))
+				.filter((food): food is Food => food !== undefined)
+				.slice(0, RECENT_LIMIT);
+		})();
 		return () => {
 			cancelled = true;
 		};
@@ -75,11 +101,11 @@
 </script>
 
 <div class="flex flex-col gap-2">
-	{#if favorites.length > 0}
+	{#if recentFoods.length > 0}
 		<div class="flex flex-wrap gap-1.5">
-			{#each favorites as food (food.id)}
+			{#each recentFoods as food (food.id)}
 				<Button variant="outline" size="xs" class="max-w-full" onclick={() => pick(food)}>
-					<StarIcon class="text-yellow-500" fill="currentColor" />
+					<HistoryIcon class="text-muted-foreground" />
 					<span class="truncate">{food.name}</span>
 				</Button>
 			{/each}
