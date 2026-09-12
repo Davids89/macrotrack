@@ -2,7 +2,7 @@
 	import { onMount } from 'svelte';
 	import { diary, goals, today } from '$lib/stores.svelte';
 	import { fmt, toNumber } from '$lib/format';
-	import { MEAL_TYPES, type Entry, type MealType } from '$lib/db';
+	import { MEAL_TYPES, suggestMealType, type Entry, type Food, type MealType } from '$lib/db';
 	import MacroBar from '$lib/components/MacroBar.svelte';
 	import FoodPicker from '$lib/components/FoodPicker.svelte';
 	import ConfirmDialog from '$lib/components/ConfirmDialog.svelte';
@@ -11,6 +11,7 @@
 	import { Input } from '$lib/components/ui/input';
 	import { Label } from '$lib/components/ui/label';
 	import { Progress } from '$lib/components/ui/progress';
+	import * as Dialog from '$lib/components/ui/dialog';
 	import { cn } from '$lib/utils';
 	import * as Select from '$lib/components/ui/select';
 	import { Select as SelectPrimitive } from 'bits-ui';
@@ -20,6 +21,7 @@
 	import PencilIcon from '@lucide/svelte/icons/pencil';
 	import Trash2Icon from '@lucide/svelte/icons/trash-2';
 	import InfoIcon from '@lucide/svelte/icons/info';
+	import PlusIcon from '@lucide/svelte/icons/plus';
 
 	const dateLabel = $derived.by(() => {
 		const label = new Date(diary.date + 'T12:00:00').toLocaleDateString('es-ES', {
@@ -33,7 +35,6 @@
 	const groups = $derived.by(() =>
 		MEAL_TYPES.map((type) => {
 			const entries = diary.entries.filter((entry) => (entry.mealType ?? 'comida') === type.key);
-			if (entries.length === 0) return null;
 			return {
 				...type,
 				entries,
@@ -45,7 +46,7 @@
 					fiber: entries.reduce((acc, e) => acc + e.fiber, 0)
 				}
 			};
-		}).filter((group): group is NonNullable<typeof group> => group !== null)
+		})
 	);
 
 	const kcalRemaining = $derived(goals.kcal - diary.totals.kcal);
@@ -60,6 +61,18 @@
 	let savingCompletion = $state(false);
 	let completionError = $state('');
 	let showHelper = $state(false);
+	let addOpen = $state(false);
+	let addMealType = $state<MealType>(suggestMealType());
+
+	function openAdd(mealType?: MealType) {
+		addMealType = mealType ?? suggestMealType();
+		addOpen = true;
+	}
+
+	async function handleAdd(food: Food, grams: number, mealType: MealType, units?: number) {
+		await diary.addFood(food, grams, mealType, units);
+		addOpen = false;
+	}
 
 	async function toggleComplete() {
 		savingCompletion = true;
@@ -174,27 +187,32 @@
 	</CardContent>
 </Card>
 
-<Card class="sticky top-2 z-10">
-	<CardContent>
-		<h2 class="mb-3 text-base font-semibold">Añadir</h2>
-		<FoodPicker onAdd={(food, grams, mealType, units) => diary.addFood(food, grams, mealType, units)} />
-	</CardContent>
-</Card>
-
 <Card>
 	<CardContent>
 		<h2 class="mb-3 text-base font-semibold">Comidas ({diary.entries.length})</h2>
-		{#if diary.entries.length === 0}
-			<p class="text-sm text-muted-foreground">Nada registrado todavía.</p>
-		{:else}
-			{#each groups as group}
-				<div class="group">
-					<div class="flex items-baseline justify-between gap-2 rounded-lg bg-secondary px-2.5 py-2">
+		{#each groups as group}
+			<div class="group">
+				<div class="flex items-center justify-between gap-2 rounded-lg bg-secondary px-2.5 py-2">
+					<div class="flex min-w-0 items-baseline gap-2">
 						<strong class="text-sm">{group.label}</strong>
-						<small class="text-xs text-muted-foreground">
-							{fmt(group.totals.kcal)} kcal · G {fmt(group.totals.fat)} · C {fmt(group.totals.carbs)} · F {fmt(group.totals.fiber)} · P {fmt(group.totals.protein)}
-						</small>
+						{#if group.entries.length > 0}
+							<small class="truncate text-xs text-muted-foreground">
+								{fmt(group.totals.kcal)} kcal · G {fmt(group.totals.fat)} · C {fmt(group.totals.carbs)} · F {fmt(group.totals.fiber)} · P {fmt(group.totals.protein)}
+							</small>
+						{:else}
+							<small class="text-xs text-muted-foreground">Sin registros</small>
+						{/if}
 					</div>
+					<Button
+						variant="ghost"
+						size="icon-sm"
+						aria-label={`Añadir a ${group.label}`}
+						onclick={() => openAdd(group.key)}
+					>
+						<PlusIcon />
+					</Button>
+				</div>
+				{#if group.entries.length > 0}
 					<ul>
 						{#each group.entries as entry (entry.id)}
 							<li class="flex items-center justify-between gap-2 border-b border-border py-2.5 last:border-b-0">
@@ -252,11 +270,28 @@
 							</li>
 						{/each}
 					</ul>
-				</div>
-			{/each}
-		{/if}
+				{/if}
+			</div>
+		{/each}
 	</CardContent>
 </Card>
+
+<div class="pointer-events-none fixed inset-x-0 bottom-[calc(env(safe-area-inset-bottom)+4.75rem)] z-40">
+	<div class="mx-auto flex max-w-[640px] justify-end px-4">
+		<Button class="pointer-events-auto size-12 rounded-full shadow-lg" aria-label="Añadir alimento" onclick={() => openAdd()}>
+			<PlusIcon class="size-6" />
+		</Button>
+	</div>
+</div>
+
+<Dialog.Root bind:open={addOpen}>
+	<Dialog.Content class="max-h-[85dvh] overflow-y-auto">
+		<Dialog.Header>
+			<Dialog.Title>Añadir alimento</Dialog.Title>
+		</Dialog.Header>
+		<FoodPicker initialMealType={addMealType} onAdd={handleAdd} />
+	</Dialog.Content>
+</Dialog.Root>
 
 <ConfirmDialog
 	open={confirmEntry !== null}

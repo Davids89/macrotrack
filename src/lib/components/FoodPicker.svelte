@@ -9,20 +9,35 @@
 	import { Select as SelectPrimitive } from 'bits-ui';
 	import StarIcon from '@lucide/svelte/icons/star';
 
-	let { onAdd }: { onAdd: (food: Food, grams: number, mealType: MealType, units?: number) => void } = $props();
+	let {
+		onAdd,
+		initialMealType
+	}: {
+		onAdd: (food: Food, grams: number, mealType: MealType, units?: number) => void;
+		initialMealType?: MealType;
+	} = $props();
+
+	const defaultMealType = () => initialMealType ?? suggestMealType();
 
 	let query = $state('');
 	let foods: Food[] = $state([]);
 	let selected: Food | null = $state(null);
 	let grams = $state('');
 	let units = $state('');
-	let mealType = $state<MealType>(suggestMealType());
+	let mealType = $state<MealType>(defaultMealType());
 
 	const results = $derived.by(() => {
 		const q = fold(query);
 		if (!q) return [];
 		return sortFavoritesFirst(foods.filter((food) => fold(food.name).includes(q))).slice(0, 8);
 	});
+
+	const favorites = $derived(
+		foods
+			.filter((food) => food.favorite)
+			.sort((a, b) => a.name.localeCompare(b.name, 'es'))
+			.slice(0, 6)
+	);
 
 	$effect(() => {
 		let cancelled = false;
@@ -37,7 +52,7 @@
 	function pick(food: Food) {
 		selected = food;
 		query = '';
-		mealType = suggestMealType();
+		mealType = defaultMealType();
 	}
 
 	function add() {
@@ -49,7 +64,7 @@
 		selected = null;
 		grams = '';
 		units = '';
-		mealType = suggestMealType();
+		mealType = defaultMealType();
 	}
 
 	const canAdd = $derived.by(() => {
@@ -60,6 +75,16 @@
 </script>
 
 <div class="flex flex-col gap-2">
+	{#if favorites.length > 0}
+		<div class="flex flex-wrap gap-1.5">
+			{#each favorites as food (food.id)}
+				<Button variant="outline" size="xs" class="max-w-full" onclick={() => pick(food)}>
+					<StarIcon class="text-yellow-500" fill="currentColor" />
+					<span class="truncate">{food.name}</span>
+				</Button>
+			{/each}
+		</div>
+	{/if}
 	<Input type="search" placeholder="Buscar alimento…" bind:value={query} />
 	{#if results.length > 0}
 		<ul class="max-h-64 flex flex-col gap-1 overflow-auto">
