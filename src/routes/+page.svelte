@@ -147,7 +147,7 @@
 
 <Card>
 	<CardContent>
-		<div class="mb-3 flex flex-wrap items-center justify-between gap-2">
+		<div class="mb-4 flex flex-wrap items-center justify-between gap-2">
 			<h2 class="text-base font-semibold">Totales</h2>
 			<div class="flex items-center gap-1">
 				{#if diary.date !== today()}
@@ -171,12 +171,12 @@
 				</Button>
 			</div>
 		</div>
-		<div class="mb-3 flex items-center justify-between gap-2">
+		<div class="mb-4 flex items-center justify-between gap-2">
 			<Button variant="outline" size="icon-sm" onclick={() => shift(-1)} aria-label="Día anterior">
 				<ChevronLeftIcon />
 			</Button>
 			<label
-				class="relative min-w-0 flex-1 cursor-pointer rounded-lg px-2 py-1 text-center text-sm hover:bg-muted has-[input:focus-visible]:ring-2 has-[input:focus-visible]:ring-ring"
+				class="relative min-w-0 flex-1 cursor-pointer rounded-lg px-2 py-1 text-center text-sm font-medium hover:bg-muted has-[input:focus-visible]:ring-2 has-[input:focus-visible]:ring-ring"
 			>
 				<span class="block truncate">{dateLabel}</span>
 				<input
@@ -192,13 +192,13 @@
 			</Button>
 		</div>
 		{#if showHelper}
-			<p class="mb-3 text-xs text-muted-foreground">
+			<p class="mb-4 text-xs text-muted-foreground">
 				{diary.complete
 					? 'Día confirmado. Puedes desmarcarlo si faltan comidas; editar registros mantiene la confirmación.'
 					: 'Confirma cuando hayas registrado todo el día para incluirlo en el balance semanal.'}
 			</p>
 		{/if}
-		{#if completionError}<p role="alert" class="mb-3 text-sm text-destructive">{completionError}</p>{/if}
+		{#if completionError}<p role="alert" class="mb-4 text-sm text-destructive">{completionError}</p>{/if}
 		<p class="text-xs text-muted-foreground">{kcalOver ? 'Excedidas' : 'Restantes'}</p>
 		<p class="text-3xl font-bold tabular-nums" class:text-destructive={kcalOver}>
 			{fmt(kcalOver ? -kcalRemaining : kcalRemaining)}
