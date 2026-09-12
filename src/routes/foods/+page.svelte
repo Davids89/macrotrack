@@ -3,7 +3,6 @@
 	import { deleteFood, db, type Food } from '$lib/db';
 	import { fmt, fold, toNumber } from '$lib/format';
 	import { findFoodMatch } from '$lib/foodmatch';
-	import { searchProducts, type OffSearchResult } from '$lib/openfoodfacts';
 	import ConfirmDialog from '$lib/components/ConfirmDialog.svelte';
 	import { sortFavoritesFirst } from '$lib/favorites';
 	import { Card, CardContent } from '$lib/components/ui/card';
@@ -22,12 +21,6 @@
 	let saved = $state<string | null>(null);
 	let editingId = $state<number | null>(null);
 	let formError = $state('');
-	let searchOff = $state(false);
-	let offQuery = $state('');
-	let offLoading = $state(false);
-	let offError = $state('');
-	let offResults = $state<OffSearchResult[]>([]);
-	let savedOff = $state<Set<number>>(new Set());
 	let confirmFood = $state<Food | null>(null);
 	let usage = $state<Map<number, number>>(new Map());
 	let duplicate = $state<Food | null>(null);
@@ -53,10 +46,6 @@
 				);
 		return sortFavoritesFirst(base);
 	});
-
-	const existingBarcodes = $derived(
-		new Set(foods.map((food) => food.barcode).filter((barcode): barcode is string => Boolean(barcode)))
-	);
 
 	onMount(() => {
 		void refresh();
@@ -181,58 +170,21 @@
 		void save();
 	}
 
-	async function search() {
-		const q = offQuery.trim();
-		if (!q) return;
-		offLoading = true;
-		offError = '';
-		offResults = [];
-		try {
-			offResults = await searchProducts(q);
-		} catch (error) {
-			offError = error instanceof Error ? error.message : 'Error de red';
-		} finally {
-			offLoading = false;
-		}
-	}
-
-	async function saveOffResult(result: OffSearchResult, index: number) {
-		try {
-			await db.foods.add({
-				name: result.name,
-				brand: result.brand,
-				barcode: result.barcode,
-				base: 100,
-				kcal: result.kcal,
-				protein: result.protein,
-				carbs: result.carbs,
-				fat: result.fat,
-				fiber: result.fiber,
-				source: 'openfoodfacts',
-				createdAt: Date.now()
-			});
-			savedOff = new Set([...savedOff, index]);
-			await refresh();
-		} catch {
-			offError = 'Ese producto ya está en tu base de datos';
-		}
-	}
 </script>
 
 <Card>
 	<CardContent class="flex flex-col gap-3">
-		<h2 class="text-base font-semibold">Base de datos</h2>
 		<div class="flex gap-2">
 			<div class="relative flex-1">
 				<SearchIcon class="absolute top-1/2 left-2.5 size-4 -translate-y-1/2 text-muted-foreground" />
 				<Input type="search" class="pl-8" placeholder="Buscar por nombre o código…" bind:value={query} />
 			</div>
 			{#if query}
-				<Button variant="ghost" size="icon-sm" onclick={() => (query = '')} title="Limpiar búsqueda" aria-label="Limpiar búsqueda">
+				<Button variant="ghost" size="icon" onclick={() => (query = '')} title="Limpiar búsqueda" aria-label="Limpiar búsqueda">
 					<XIcon />
 				</Button>
 			{/if}
-			<Button variant="outline" size="sm" onclick={() => (showForm ? cancel() : (showForm = true))}>
+			<Button variant="outline" onclick={() => (showForm ? cancel() : (showForm = true))}>
 				{showForm ? 'Cancelar' : 'Nuevo alimento'}
 			</Button>
 		</div>
@@ -291,49 +243,6 @@
 					</div>
 				{/if}
 				<Button onclick={save}>{editingId !== null ? 'Guardar cambios' : 'Guardar'}</Button>
-			</div>
-		{/if}
-		<Button variant="outline" onclick={() => (searchOff = !searchOff)}>
-			{searchOff ? 'Cerrar búsqueda' : 'Buscar alimentos por nombre (OpenFoodFacts)'}
-		</Button>
-		{#if searchOff}
-			<div class="flex flex-col gap-2">
-				<div class="flex gap-2">
-					<Input bind:value={offQuery} placeholder="Ej: miel, patata, garbanzos…" />
-					<Button onclick={search} disabled={offLoading || !offQuery.trim()}>
-						{offLoading ? 'Buscando…' : 'Buscar'}
-					</Button>
-				</div>
-				{#if offError}<p class="text-sm text-destructive">{offError}</p>{/if}
-				{#if offResults.length > 0}
-					<ul>
-						{#each offResults as result, i (result.barcode ?? result.name + i)}
-							<li class="flex items-center justify-between gap-2 border-b border-border py-2.5 last:border-b-0">
-								<div class="flex min-w-0 flex-col gap-0.5">
-									<strong class="text-sm">{result.name}</strong>
-									<small class="text-xs text-muted-foreground">
-										{#if result.brand}<span>{result.brand} · </span>{/if}
-										{#if result.barcode}<span>{result.barcode} · </span>{/if}
-										{#if result.hasNutriments}
-											{fmt(result.kcal)} kcal · G {fmt(result.fat)} · C {fmt(result.carbs)} · F {fmt(result.fiber)} · P {fmt(result.protein)} / 100g
-										{:else}
-											sin datos nutricionales
-										{/if}
-									</small>
-								</div>
-								{#if result.barcode && existingBarcodes.has(result.barcode)}
-									<Button variant="outline" size="sm" disabled>En BD</Button>
-								{:else if savedOff.has(i)}
-									<Button variant="outline" size="sm" disabled>Guardado ✓</Button>
-								{:else}
-									<Button size="sm" onclick={() => saveOffResult(result, i)}>Guardar</Button>
-								{/if}
-							</li>
-						{/each}
-					</ul>
-				{:else if !offLoading}
-					<p class="text-sm text-muted-foreground">Busca por nombre (ej: «miel», «patata») y guarda los que quieras en tu base de datos.</p>
-				{/if}
 			</div>
 		{/if}
 		{#if filtered.length === 0}
