@@ -146,36 +146,13 @@
 </script>
 
 <Card>
-	<CardContent class="flex items-center justify-between gap-2">
-		<Button variant="outline" size="icon-sm" onclick={() => shift(-1)} aria-label="Día anterior">
-			<ChevronLeftIcon />
-		</Button>
-		<label
-			class="relative min-w-0 flex-1 cursor-pointer rounded-lg px-2 py-1 text-center text-sm hover:bg-muted has-[input:focus-visible]:ring-2 has-[input:focus-visible]:ring-ring"
-		>
-			<span class="block truncate">{dateLabel}</span>
-			<input
-				type="date"
-				class="absolute inset-0 h-full w-full cursor-pointer opacity-0"
-				value={diary.date}
-				aria-label="Elegir fecha"
-				onchange={(event) => diary.setDate(event.currentTarget.value)}
-			/>
-		</label>
-		<Button variant="outline" size="icon-sm" onclick={() => shift(1)} aria-label="Día siguiente">
-			<ChevronRightIcon />
-		</Button>
-		{#if diary.date !== today()}
-			<Button variant="outline" size="sm" onclick={() => diary.setDate(today())}>Hoy</Button>
-		{/if}
-	</CardContent>
-</Card>
-
-<Card>
 	<CardContent>
-		<div class="mb-3 flex items-center justify-between gap-2">
+		<div class="mb-3 flex flex-wrap items-center justify-between gap-2">
 			<h2 class="text-base font-semibold">Totales</h2>
 			<div class="flex items-center gap-1">
+				{#if diary.date !== today()}
+					<Button variant="outline" size="sm" onclick={() => diary.setDate(today())}>Hoy</Button>
+				{/if}
 				<Button
 					variant={diary.complete ? 'secondary' : 'outline'}
 					size="sm"
@@ -193,6 +170,26 @@
 					<InfoIcon />
 				</Button>
 			</div>
+		</div>
+		<div class="mb-3 flex items-center justify-between gap-2">
+			<Button variant="outline" size="icon-sm" onclick={() => shift(-1)} aria-label="Día anterior">
+				<ChevronLeftIcon />
+			</Button>
+			<label
+				class="relative min-w-0 flex-1 cursor-pointer rounded-lg px-2 py-1 text-center text-sm hover:bg-muted has-[input:focus-visible]:ring-2 has-[input:focus-visible]:ring-ring"
+			>
+				<span class="block truncate">{dateLabel}</span>
+				<input
+					type="date"
+					class="absolute inset-0 h-full w-full cursor-pointer opacity-0"
+					value={diary.date}
+					aria-label="Elegir fecha"
+					onchange={(event) => diary.setDate(event.currentTarget.value)}
+				/>
+			</label>
+			<Button variant="outline" size="icon-sm" onclick={() => shift(1)} aria-label="Día siguiente">
+				<ChevronRightIcon />
+			</Button>
 		</div>
 		{#if showHelper}
 			<p class="mb-3 text-xs text-muted-foreground">
