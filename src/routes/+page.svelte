@@ -1,7 +1,7 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
 	import { diary, goals, today } from '$lib/stores.svelte';
-	import { fmt, toNumber } from '$lib/format';
+	import { fmt, fmtTime, toNumber } from '$lib/format';
 	import { MEAL_TYPES, suggestMealType, type Entry, type Food, type MealType } from '$lib/db';
 	import MacroBar from '$lib/components/MacroBar.svelte';
 	import FoodPicker from '$lib/components/FoodPicker.svelte';
@@ -14,7 +14,7 @@
 	import * as Dialog from '$lib/components/ui/dialog';
 	import { cn } from '$lib/utils';
 	import * as Select from '$lib/components/ui/select';
-	import { Select as SelectPrimitive } from 'bits-ui';
+	import { DropdownMenu, Select as SelectPrimitive } from 'bits-ui';
 	import { MACROS } from '$lib/macros';
 	import ChevronLeftIcon from '@lucide/svelte/icons/chevron-left';
 	import ChevronRightIcon from '@lucide/svelte/icons/chevron-right';
@@ -22,6 +22,7 @@
 	import Trash2Icon from '@lucide/svelte/icons/trash-2';
 	import InfoIcon from '@lucide/svelte/icons/info';
 	import PlusIcon from '@lucide/svelte/icons/plus';
+	import EllipsisVerticalIcon from '@lucide/svelte/icons/ellipsis-vertical';
 
 	const dateLabel = $derived.by(() => {
 		const label = new Date(diary.date + 'T12:00:00').toLocaleDateString('es-ES', {
@@ -54,6 +55,7 @@
 	const kcalPct = $derived(goals.kcal > 0 ? Math.min(100, (diary.totals.kcal / goals.kcal) * 100) : 0);
 
 	let editingId = $state<number | null>(null);
+	let expandedId = $state<number | null>(null);
 	let editGrams = $state('100');
 	let editUnits = $state('1');
 	let editType = $state<MealType>('comida');
@@ -111,6 +113,7 @@
 
 	function startEdit(entry: Entry) {
 		editingId = entry.id!;
+		expandedId = null;
 		editGrams = String(entry.grams);
 		editUnits = String(entry.units ?? 1);
 		editType = entry.mealType ?? 'comida';
@@ -268,26 +271,48 @@
 										</div>
 									</div>
 								{:else}
-									<div class="flex min-w-0 flex-col gap-0.5">
-										<strong class="text-sm">{entry.name}</strong>
-										<small class="text-xs text-muted-foreground">
-											{#if entry.units !== undefined}{fmt(entry.units)} ud · {/if}{fmt(entry.grams)} g · {fmt(entry.kcal)} kcal · G {fmt(entry.fat)} · C {fmt(entry.carbs)} · F {fmt(entry.fiber)} · P {fmt(entry.protein)}
-										</small>
-									</div>
-									<div class="flex shrink-0 gap-1.5">
-										<Button variant="ghost" size="icon-sm" onclick={() => startEdit(entry)} title="Editar" aria-label="Editar">
-											<PencilIcon />
-										</Button>
-										<Button
-											variant="ghost"
-											size="icon-sm"
-											class="text-destructive hover:text-destructive"
-											onclick={() => (confirmEntry = entry)}
-											title="Eliminar"
-											aria-label="Eliminar"
+									<div class="flex items-center gap-2">
+										<button
+											type="button"
+											class="flex min-w-0 flex-1 flex-col gap-0.5 text-left"
+											aria-expanded={expandedId === entry.id}
+											onclick={() => (expandedId = expandedId === entry.id ? null : entry.id!)}
 										>
-											<Trash2Icon />
-										</Button>
+											<strong class="truncate text-sm">{entry.name}</strong>
+											<small class="text-xs text-muted-foreground">
+												{fmtTime(entry.createdAt)} · {#if entry.units !== undefined}{fmt(entry.units)} ud · {/if}{fmt(entry.grams)} g · {fmt(entry.kcal)} kcal
+											</small>
+											{#if expandedId === entry.id}
+												<small class="mt-0.5 text-xs text-muted-foreground">
+													G {fmt(entry.fat)} · C {fmt(entry.carbs)} · F {fmt(entry.fiber)} · P {fmt(entry.protein)}
+												</small>
+											{/if}
+										</button>
+										<DropdownMenu.Root>
+											<DropdownMenu.Trigger>
+												{#snippet child({ props })}
+													<Button variant="ghost" size="icon-sm" aria-label={`Acciones de ${entry.name}`} {...props}>
+														<EllipsisVerticalIcon />
+													</Button>
+												{/snippet}
+											</DropdownMenu.Trigger>
+											<DropdownMenu.Content class="z-50 min-w-36 rounded-lg bg-popover p-1 shadow-lg ring-1 ring-foreground/10">
+												<DropdownMenu.Item
+													class="flex cursor-default select-none items-center gap-2 rounded-md px-2 py-1.5 text-sm outline-none data-[highlighted]:bg-muted"
+													onclick={() => startEdit(entry)}
+												>
+													<PencilIcon class="size-3.5" />
+													Editar
+												</DropdownMenu.Item>
+												<DropdownMenu.Item
+													class="flex cursor-default select-none items-center gap-2 rounded-md px-2 py-1.5 text-sm text-destructive outline-none data-[highlighted]:bg-muted"
+													onclick={() => (confirmEntry = entry)}
+												>
+													<Trash2Icon class="size-3.5" />
+													Eliminar
+												</DropdownMenu.Item>
+											</DropdownMenu.Content>
+										</DropdownMenu.Root>
 									</div>
 								{/if}
 							</li>
