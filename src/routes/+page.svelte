@@ -10,6 +10,8 @@
 	import { Button } from '$lib/components/ui/button';
 	import { Input } from '$lib/components/ui/input';
 	import { Label } from '$lib/components/ui/label';
+	import { Progress } from '$lib/components/ui/progress';
+	import { cn } from '$lib/utils';
 	import * as Select from '$lib/components/ui/select';
 	import { Select as SelectPrimitive } from 'bits-ui';
 	import { MACROS } from '$lib/macros';
@@ -17,6 +19,7 @@
 	import ChevronRightIcon from '@lucide/svelte/icons/chevron-right';
 	import PencilIcon from '@lucide/svelte/icons/pencil';
 	import Trash2Icon from '@lucide/svelte/icons/trash-2';
+	import InfoIcon from '@lucide/svelte/icons/info';
 
 	const dateLabel = $derived.by(() => {
 		const label = new Date(diary.date + 'T12:00:00').toLocaleDateString('es-ES', {
@@ -45,6 +48,10 @@
 		}).filter((group): group is NonNullable<typeof group> => group !== null)
 	);
 
+	const kcalRemaining = $derived(goals.kcal - diary.totals.kcal);
+	const kcalOver = $derived(kcalRemaining < 0);
+	const kcalPct = $derived(goals.kcal > 0 ? Math.min(100, (diary.totals.kcal / goals.kcal) * 100) : 0);
+
 	let editingId = $state<number | null>(null);
 	let editGrams = $state('100');
 	let editUnits = $state('1');
@@ -52,6 +59,7 @@
 	let confirmEntry = $state<Entry | null>(null);
 	let savingCompletion = $state(false);
 	let completionError = $state('');
+	let showHelper = $state(false);
 
 	async function toggleComplete() {
 		savingCompletion = true;
@@ -113,24 +121,47 @@
 
 <Card>
 	<CardContent>
-		<div class="mb-3 flex flex-wrap items-center justify-between gap-2">
+		<div class="mb-3 flex items-center justify-between gap-2">
 			<h2 class="text-base font-semibold">Totales</h2>
-			<Button
-				variant={diary.complete ? 'secondary' : 'outline'}
-				size="sm"
-				aria-pressed={diary.complete}
-				disabled={diary.loading || savingCompletion || (!diary.complete && (!diary.entries.length || diary.date > today()))}
-				onclick={toggleComplete}
-			>{savingCompletion ? 'Guardando…' : diary.complete ? '✓ Día completo' : 'Marcar día completo'}</Button>
+			<div class="flex items-center gap-1">
+				<Button
+					variant={diary.complete ? 'secondary' : 'outline'}
+					size="sm"
+					aria-pressed={diary.complete}
+					disabled={diary.loading || savingCompletion || (!diary.complete && (!diary.entries.length || diary.date > today()))}
+					onclick={toggleComplete}
+				>{savingCompletion ? 'Guardando…' : diary.complete ? '✓ Día completo' : 'Marcar día completo'}</Button>
+				<Button
+					variant="ghost"
+					size="icon-sm"
+					aria-label="Más información sobre el día completo"
+					aria-expanded={showHelper}
+					onclick={() => (showHelper = !showHelper)}
+				>
+					<InfoIcon />
+				</Button>
+			</div>
 		</div>
-		<p class="mb-3 text-xs text-muted-foreground">
-			{diary.complete
-				? 'Día confirmado. Puedes desmarcarlo si faltan comidas; editar registros mantiene la confirmación.'
-				: 'Confirma cuando hayas registrado todo el día para incluirlo en el balance semanal.'}
-		</p>
+		{#if showHelper}
+			<p class="mb-3 text-xs text-muted-foreground">
+				{diary.complete
+					? 'Día confirmado. Puedes desmarcarlo si faltan comidas; editar registros mantiene la confirmación.'
+					: 'Confirma cuando hayas registrado todo el día para incluirlo en el balance semanal.'}
+			</p>
+		{/if}
 		{#if completionError}<p role="alert" class="mb-3 text-sm text-destructive">{completionError}</p>{/if}
-		<div class="flex flex-col gap-3">
-			{#each MACROS as macro}
+		<p class="text-xs text-muted-foreground">{kcalOver ? 'Excedidas' : 'Restantes'}</p>
+		<p class="text-3xl font-bold tabular-nums" class:text-destructive={kcalOver}>
+			{fmt(kcalOver ? -kcalRemaining : kcalRemaining)}
+			<span class="text-sm font-normal text-muted-foreground">kcal</span>
+		</p>
+		<p class="text-xs text-muted-foreground">{fmt(diary.totals.kcal)} de {fmt(goals.kcal)} kcal</p>
+		<Progress
+			value={kcalPct}
+			class={cn('mt-2 h-2', kcalOver && '[&_[data-slot=progress-indicator]]:bg-destructive')}
+		/>
+		<div class="mt-4 flex flex-col gap-2.5">
+			{#each MACROS.slice(1) as macro}
 				<MacroBar
 					label={macro.label}
 					value={diary.totals[macro.key]}
