@@ -241,7 +241,7 @@
 				{#if group.entries.length > 0}
 					<ul>
 						{#each group.entries as entry (entry.id)}
-							<li class="flex items-center justify-between gap-2 border-b border-border py-2.5 last:border-b-0">
+							<li class="border-b border-border py-2.5 last:border-b-0">
 								{#if editingId === entry.id}
 									<div class="flex w-full flex-wrap items-end gap-2">
 										<div class="min-w-[90px] flex-1">
