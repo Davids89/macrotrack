@@ -13,8 +13,10 @@
 	} from '$lib/stores.svelte';
 	import { fmt, toNumber } from '$lib/format';
 	import { type Weight } from '$lib/db';
+	import { MACROS } from '$lib/macros';
 	import ConfirmDialog from '$lib/components/ConfirmDialog.svelte';
 	import Trash2Icon from '@lucide/svelte/icons/trash-2';
+	import ChevronDownIcon from '@lucide/svelte/icons/chevron-down';
 	import { Card, CardContent } from '$lib/components/ui/card';
 	import { Button } from '$lib/components/ui/button';
 	import { Input } from '$lib/components/ui/input';
@@ -33,6 +35,13 @@
 		{ key: 'moderate', label: 'Moderado (3–4 días/semana)' },
 		{ key: 'active', label: 'Intenso (5+ días/semana)' }
 	];
+
+	const ACTIVITY_SHORT: Record<ActivityLevel, string> = {
+		sedentary: 'Sedentario',
+		light: 'Ligero',
+		moderate: 'Moderado',
+		active: 'Intenso'
+	};
 
 	const GOAL_OPTIONS: { key: Goal; label: string }[] = [
 		{ key: 'lose', label: 'Perder grasa (−400 kcal)' },
@@ -71,15 +80,18 @@
 		}
 	});
 
+	// Los objetivos usan el último peso registrado; el del perfil es solo el respaldo sin registros.
+	const latestWeight = $derived(weights.records.at(-1));
+	const effectiveWeight = $derived(latestWeight?.weight ?? toNumber(pform.weight));
+
 	const profileBreakdown = $derived.by(() => {
 		const height = toNumber(pform.height);
-		const weight = toNumber(pform.weight);
+		const weight = effectiveWeight;
 		const age = toNumber(pform.age);
 		if (!height || !weight || !age) return null;
 		return computeGoalsBreakdown({ height, weight, age, sex: pform.sex, activity: pform.activity, goal: pform.goal });
 	});
 
-	const weightKg = $derived(toNumber(pform.weight));
 	const profileTotals = $derived(profileBreakdown?.totals ?? null);
 
 	$effect(() => {
@@ -88,12 +100,28 @@
 		saveGoals();
 		saveProfile({
 			height: toNumber(pform.height),
-			weight: toNumber(pform.weight),
+			weight: effectiveWeight,
 			age: toNumber(pform.age),
 			sex: pform.sex,
 			activity: pform.activity,
 			goal: pform.goal
 		});
+	});
+
+	const profileSummary = $derived.by(() => {
+		const parts: string[] = [];
+		if (toNumber(pform.height) > 0) parts.push(`${fmt(toNumber(pform.height))} cm`);
+		if (toNumber(pform.age) > 0) parts.push(`${fmt(toNumber(pform.age))} años`);
+		parts.push(SEX_OPTIONS.find((option) => option.key === pform.sex)?.label ?? '');
+		parts.push(ACTIVITY_SHORT[pform.activity]);
+		parts.push(GOAL_SHORT[pform.goal]);
+		return parts.filter(Boolean).join(' · ');
+	});
+
+	const weightSource = $derived.by(() => {
+		if (latestWeight) return `Peso usado: ${fmt(latestWeight.weight)} kg (registro del ${weightDateLabel(latestWeight.date)})`;
+		const manual = toNumber(pform.weight);
+		return manual > 0 ? `Peso usado: ${fmt(manual)} kg (del perfil, sin registros de peso)` : null;
 	});
 
 	let weightInput = $state('');
@@ -144,7 +172,7 @@
 			grid,
 			xLabels,
 			delta: slice.at(-1)!.weight - slice[0].weight,
-			fatDelta: withFat.length >= 2 ? withFat.at(-1)!.bodyFat! - withFat[0].bodyFat! : null
+			fatDelta: withFat.length >= 2 ? withFat.at(-1)!.bodyFat! - withFat[0]!.bodyFat! : null
 		};
 	});
 
@@ -158,9 +186,40 @@
 			: (weightRange.fatDelta > 0 ? '+' : '') + fmt(weightRange.fatDelta) + '% grasa'
 	);
 
+	// El color de la tendencia depende del objetivo: bajar es bueno al perder grasa, subir al ganar músculo.
+	const weightDeltaClass = $derived.by(() => {
+		if (!weightRange) return '';
+		if (pform.goal === 'gain') return weightRange.delta >= 0 ? 'text-green-500' : 'text-red-500';
+		if (pform.goal === 'lose') return weightRange.delta <= 0 ? 'text-green-500' : 'text-red-500';
+		return 'text-muted-foreground';
+	});
+
+	const fatDeltaClass = $derived.by(() => {
+		if (weightRange?.fatDelta == null) return '';
+		if (weightRange.fatDelta <= 0) return 'text-green-500';
+		return pform.goal === 'gain' ? 'text-muted-foreground' : 'text-red-500';
+	});
+
 	const weightHistory = $derived([...weights.records].reverse());
 
 	let selectedWeight = $state<number | null>(null);
+	let editingWeightId = $state<number | null>(null);
+	let editWeightValue = $state('');
+	let editBodyFatValue = $state('');
+
+	function startWeightEdit(record: Weight) {
+		editingWeightId = record.id!;
+		editWeightValue = String(record.weight);
+		editBodyFatValue = record.bodyFat ? String(record.bodyFat) : '';
+	}
+
+	async function saveWeightEdit(record: Weight) {
+		const value = toNumber(editWeightValue);
+		if (!value || value <= 0) return;
+		const fat = toNumber(editBodyFatValue);
+		await weights.save(record.date, value, fat > 0 ? fat : undefined);
+		editingWeightId = null;
+	}
 
 	function tapWeightChart(e: PointerEvent) {
 		const range = weightRange;
@@ -196,13 +255,13 @@
 		}
 	}
 
-function weightDateLabel(date: string) {
-	return new Date(date + 'T12:00:00').toLocaleDateString('es-ES', { day: 'numeric', month: 'short' });
-}
+	function weightDateLabel(date: string) {
+		return new Date(date + 'T12:00:00').toLocaleDateString('es-ES', { day: 'numeric', month: 'short' });
+	}
 
-function weightTimeLabel(record: { createdAt: number }) {
-	return new Date(record.createdAt).toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' });
-}
+	function weightTimeLabel(record: { createdAt: number }) {
+		return new Date(record.createdAt).toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' });
+	}
 
 	async function saveWeight() {
 		const w = toNumber(weightInput);
@@ -223,128 +282,35 @@ function weightTimeLabel(record: { createdAt: number }) {
 </script>
 
 <Card>
-	<CardContent class="flex flex-col gap-2.5">
-		<h2 class="text-base font-semibold">Perfil</h2>
-		<div class="grid grid-cols-3 gap-2">
-			<div>
-				<Label class="mb-1 block">Altura (cm)</Label>
-				<Input type="text" min="100" max="250" bind:value={pform.height} inputmode="numeric" />
-			</div>
-			<div>
-				<Label class="mb-1 block">Peso (kg)</Label>
-				<Input type="text" min="30" max="250" bind:value={pform.weight} inputmode="decimal" />
-			</div>
-			<div>
-				<Label class="mb-1 block">Edad</Label>
-				<Input type="text" min="10" max="120" bind:value={pform.age} inputmode="numeric" />
-			</div>
-		</div>
-		<div>
-			<Label class="mb-1 block">Sexo</Label>
-			<Select.Root bind:value={pform.sex} items={SEX_OPTIONS.map((o) => ({ value: o.key, label: o.label }))}>
-				<Select.Trigger class="w-full">
-					<SelectPrimitive.Value placeholder="Sexo" />
-				</Select.Trigger>
-				<Select.Content>
-					{#each SEX_OPTIONS as option}
-						<Select.Item value={option.key} label={option.label}>{option.label}</Select.Item>
-					{/each}
-				</Select.Content>
-			</Select.Root>
-		</div>
-		<div>
-			<Label class="mb-1 block">Nivel de actividad</Label>
-			<Select.Root bind:value={pform.activity} items={ACTIVITY_OPTIONS.map((o) => ({ value: o.key, label: o.label }))}>
-				<Select.Trigger class="w-full">
-					<SelectPrimitive.Value placeholder="Nivel de actividad" />
-				</Select.Trigger>
-				<Select.Content>
-					{#each ACTIVITY_OPTIONS as option}
-						<Select.Item value={option.key} label={option.label}>{option.label}</Select.Item>
-					{/each}
-				</Select.Content>
-			</Select.Root>
-		</div>
-		<div>
-			<Label class="mb-1 block">Objetivo</Label>
-			<Select.Root bind:value={pform.goal} items={GOAL_OPTIONS.map((o) => ({ value: o.key, label: o.label }))}>
-				<Select.Trigger class="w-full">
-					<SelectPrimitive.Value placeholder="Objetivo" />
-				</Select.Trigger>
-				<Select.Content>
-					{#each GOAL_OPTIONS as option}
-						<Select.Item value={option.key} label={option.label}>{option.label}</Select.Item>
-					{/each}
-				</Select.Content>
-			</Select.Root>
-		</div>
-		{#if profileBreakdown}
-			<div class="grid gap-1 rounded-lg border border-border bg-muted/40 p-3 text-xs text-muted-foreground">
-				<p class="font-semibold text-foreground">
-					Objetivos calculados: {fmt(profileBreakdown.totals.kcal)} kcal · G {fmt(profileBreakdown.totals.fat)} g · C {fmt(profileBreakdown.totals.carbs)} g · F {fmt(profileBreakdown.totals.fiber)} g · P {fmt(profileBreakdown.totals.protein)} g
-				</p>
-				<p>
-					TMB (Harris-Benedict): {fmt(profileBreakdown.tmb)} kcal × {fmt(profileBreakdown.activityFactor, 3)} (actividad) = <span class="font-semibold text-foreground">{fmt(profileBreakdown.tdee)} kcal/día</span>
-				</p>
-				<p>
-					Ajuste objetivo ({GOAL_SHORT[pform.goal]}): {profileBreakdown.adjustment > 0 ? '+' : ''}{fmt(profileBreakdown.adjustment)} kcal → <span class="font-semibold text-foreground">{fmt(profileBreakdown.totals.kcal)} kcal</span>
-				</p>
-				<p>
-					Proteína: {fmt(weightKg)} kg × 2.1 = <span class="font-semibold text-foreground">{fmt(profileBreakdown.totals.protein)} g</span>
-				</p>
-				<p>
-					Grasa: {fmt(weightKg)} kg × 0.9 = <span class="font-semibold text-foreground">{fmt(profileBreakdown.totals.fat)} g</span>
-				</p>
-				<p>
-					Carbohidratos: ({fmt(profileBreakdown.totals.kcal)} − {fmt(profileBreakdown.totals.protein * 4)} − {fmt(profileBreakdown.totals.fat * 9)}) ÷ 4 = <span class="font-semibold text-foreground">{fmt(profileBreakdown.totals.carbs)} g</span>
-				</p>
-			</div>
-		{:else}
-			<p class="text-xs text-muted-foreground">Rellena altura, peso y edad para calcular tus objetivos (Harris-Benedict).</p>
-		{/if}
-	</CardContent>
-</Card>
-
-<Card>
 	<CardContent class="flex flex-col gap-3">
 		<div class="flex items-center justify-between">
 			<h2 class="text-base font-semibold">Peso</h2>
 			{#if deltaLabel}
 				<span class="text-xs text-muted-foreground"
-					>30 días · <span class={weightRange!.delta <= 0 ? 'text-green-500' : 'text-red-500'}>{deltaLabel}</span>{#if fatDeltaLabel}
-						· <span class={weightRange!.fatDelta! <= 0 ? 'text-green-500' : 'text-red-500'}>{fatDeltaLabel}</span>{/if}</span
+					>30 días · <span class={weightDeltaClass}>{deltaLabel}</span>{#if fatDeltaLabel}
+						· <span class={fatDeltaClass}>{fatDeltaLabel}</span>{/if}</span
 				>
 			{/if}
 		</div>
-		<div class="flex items-end gap-2">
+		<form
+			class="flex items-end gap-2"
+			onsubmit={(event) => {
+				event.preventDefault();
+				saveWeight();
+			}}
+		>
 			<div class="w-32">
-				<Label class="mb-1 block">Peso actual (kg)</Label>
-				<Input
-					type="text"
-					min="30"
-					max="250"
-					step="0.1"
-					bind:value={weightInput}
-					inputmode="decimal"
-					placeholder={profile.value ? String(profile.value.weight) : ''}
-				/>
+				<Label class="mb-1 block" for="weight-current">Peso actual (kg)</Label>
+				<Input id="weight-current" type="text" bind:value={weightInput} inputmode="decimal" placeholder={profile.value ? String(profile.value.weight) : ''} />
 			</div>
 			<div class="w-28">
-				<Label class="mb-1 block">% de grasa <span class="text-muted-foreground">(opcional)</span></Label>
-				<Input
-					type="text"
-					min="1"
-					max="70"
-					step="0.1"
-					bind:value={bodyFatInput}
-					inputmode="decimal"
-					placeholder="—"
-				/>
+				<Label class="mb-1 block" for="weight-bodyfat">% de grasa <span class="text-muted-foreground">(opcional)</span></Label>
+				<Input id="weight-bodyfat" type="text" bind:value={bodyFatInput} inputmode="decimal" placeholder="—" />
 			</div>
-			<Button onclick={saveWeight} disabled={!weightInput.trim()}>
+			<Button type="submit" disabled={!weightInput.trim()}>
 				{weightSaved ? 'Guardado ✓' : 'Guardar'}
 			</Button>
-		</div>
+		</form>
 		{#if weightRange}
 			<svg viewBox="0 0 310 120" class="w-full text-primary" role="img" aria-label="Gráfica de peso">
 				<line x1="40" y1="106" x2="298" y2="106" stroke="currentColor" stroke-width="1" opacity="0.5" />
@@ -402,28 +368,173 @@ function weightTimeLabel(record: { createdAt: number }) {
 		{/if}
 		{#if weightHistory.length > 0}
 			<ul class="max-h-44 divide-y divide-border overflow-y-auto border-t border-border pt-1">
-				{#each weightHistory as record}
-					<li class="flex items-center justify-between gap-2 py-1.5 text-sm">
-						<span class="text-muted-foreground capitalize">{weightDateLabel(record.date)} · {weightTimeLabel(record)}</span>
-						<span class="flex items-center gap-2">
-							<span class="font-semibold">{fmt(record.weight)} kg{#if record.bodyFat} · {fmt(record.bodyFat)}% grasa{/if}</span>
-							<Button
-								variant="ghost"
-								size="icon-sm"
-								class="text-destructive hover:text-destructive"
-								onclick={() => (confirmWeight = record)}
-								title="Eliminar"
-								aria-label="Eliminar"
+				{#each weightHistory as record (record.id)}
+					<li class="py-1.5">
+						{#if editingWeightId === record.id}
+							<form
+								class="flex items-end gap-2"
+								onsubmit={(event) => {
+									event.preventDefault();
+									saveWeightEdit(record);
+								}}
 							>
-								<Trash2Icon />
-							</Button>
-						</span>
+								<div class="w-24">
+									<Label class="mb-1 block" for={`edit-weight-${record.id}`}>Peso (kg)</Label>
+									<Input id={`edit-weight-${record.id}`} type="text" bind:value={editWeightValue} inputmode="decimal" />
+								</div>
+								<div class="w-24">
+									<Label class="mb-1 block" for={`edit-bodyfat-${record.id}`}>% grasa</Label>
+									<Input id={`edit-bodyfat-${record.id}`} type="text" bind:value={editBodyFatValue} inputmode="decimal" placeholder="—" />
+								</div>
+								<div class="flex gap-2">
+									<Button type="submit" size="sm">Guardar</Button>
+									<Button type="button" size="sm" variant="outline" onclick={() => (editingWeightId = null)}>Cancelar</Button>
+								</div>
+							</form>
+						{:else}
+							<div class="flex items-center justify-between gap-2 text-sm">
+								<button
+									type="button"
+									class="flex min-w-0 flex-1 items-center justify-between gap-2 text-left"
+									aria-label={`Editar el registro del ${weightDateLabel(record.date)}`}
+									onclick={() => startWeightEdit(record)}
+								>
+									<span class="text-muted-foreground capitalize">{weightDateLabel(record.date)} · {weightTimeLabel(record)}</span>
+									<span class="font-semibold">{fmt(record.weight)} kg{#if record.bodyFat} · {fmt(record.bodyFat)}% grasa{/if}</span>
+								</button>
+								<Button
+									variant="ghost"
+									size="icon-sm"
+									class="text-destructive hover:text-destructive"
+									onclick={() => (confirmWeight = record)}
+									title="Eliminar"
+									aria-label="Eliminar"
+								>
+									<Trash2Icon />
+								</Button>
+							</div>
+						{/if}
 					</li>
 				{/each}
 			</ul>
 		{:else}
 			<p class="text-sm text-muted-foreground">Todavía no hay pesos registrados.</p>
 		{/if}
+	</CardContent>
+</Card>
+
+<Card>
+	<CardContent class="flex flex-col gap-3">
+		<h2 class="text-base font-semibold">Objetivos</h2>
+		{#if profileBreakdown}
+			{#if weightSource}<p class="text-xs text-muted-foreground">{weightSource}</p>{/if}
+			<p class="text-3xl font-bold tabular-nums">
+				{fmt(profileBreakdown.totals.kcal)}
+				<span class="text-sm font-normal text-muted-foreground">kcal/día</span>
+			</p>
+			<div class="flex flex-col gap-1.5 text-sm">
+				{#each MACROS.slice(1) as macro}
+					<div class="flex items-baseline justify-between">
+						<span class="text-muted-foreground">{macro.label}</span>
+						<span class="font-semibold tabular-nums">{fmt(profileBreakdown.totals[macro.key])} {macro.unit}</span>
+					</div>
+				{/each}
+			</div>
+			<details class="text-xs text-muted-foreground">
+				<summary class="cursor-pointer">¿Cómo se calcula?</summary>
+				<div class="mt-2 grid gap-1">
+					<p>
+						TMB (Harris-Benedict): {fmt(profileBreakdown.tmb)} kcal × {fmt(profileBreakdown.activityFactor, 3)} (actividad) = <span class="font-semibold text-foreground">{fmt(profileBreakdown.tdee)} kcal/día</span>
+					</p>
+					<p>
+						Ajuste objetivo ({GOAL_SHORT[pform.goal]}): {profileBreakdown.adjustment > 0 ? '+' : ''}{fmt(profileBreakdown.adjustment)} kcal → <span class="font-semibold text-foreground">{fmt(profileBreakdown.totals.kcal)} kcal</span>
+					</p>
+					<p>
+						Proteína: {fmt(effectiveWeight)} kg × 2.1 = <span class="font-semibold text-foreground">{fmt(profileBreakdown.totals.protein)} g</span>
+					</p>
+					<p>
+						Grasa: {fmt(effectiveWeight)} kg × 0.9 = <span class="font-semibold text-foreground">{fmt(profileBreakdown.totals.fat)} g</span>
+					</p>
+					<p>
+						Carbohidratos: ({fmt(profileBreakdown.totals.kcal)} − {fmt(profileBreakdown.totals.protein * 4)} − {fmt(profileBreakdown.totals.fat * 9)}) ÷ 4 = <span class="font-semibold text-foreground">{fmt(profileBreakdown.totals.carbs)} g</span>
+					</p>
+				</div>
+			</details>
+		{:else}
+			<p class="text-xs text-muted-foreground">Rellena altura, peso y edad para calcular tus objetivos (Harris-Benedict).</p>
+		{/if}
+	</CardContent>
+</Card>
+
+<Card>
+	<CardContent>
+		<details class="group">
+			<summary class="flex cursor-pointer list-none items-center justify-between gap-2 [&::-webkit-details-marker]:hidden">
+				<div>
+					<h2 class="text-base font-semibold">Datos personales</h2>
+					<p class="text-xs text-muted-foreground">{profileSummary}</p>
+				</div>
+				<ChevronDownIcon class="size-4 shrink-0 text-muted-foreground transition-transform group-open:rotate-180" />
+			</summary>
+			<div class="mt-3 flex flex-col gap-2.5">
+				<div class="grid grid-cols-2 gap-2">
+					<div>
+						<Label class="mb-1 block" for="profile-height">Altura (cm)</Label>
+						<Input id="profile-height" type="text" bind:value={pform.height} inputmode="numeric" />
+					</div>
+					<div>
+						<Label class="mb-1 block" for="profile-age">Edad</Label>
+						<Input id="profile-age" type="text" bind:value={pform.age} inputmode="numeric" />
+					</div>
+				</div>
+				{#if !latestWeight}
+					<div>
+						<Label class="mb-1 block" for="profile-weight">Peso (kg)</Label>
+						<Input id="profile-weight" type="text" bind:value={pform.weight} inputmode="decimal" />
+						<p class="mt-1 text-xs text-muted-foreground">Se usa para los objetivos mientras no tengas registros de peso.</p>
+					</div>
+				{/if}
+				<div>
+					<Label class="mb-1 block">Sexo</Label>
+					<Select.Root bind:value={pform.sex} items={SEX_OPTIONS.map((o) => ({ value: o.key, label: o.label }))}>
+						<Select.Trigger class="w-full">
+							<SelectPrimitive.Value placeholder="Sexo" />
+						</Select.Trigger>
+						<Select.Content>
+							{#each SEX_OPTIONS as option}
+								<Select.Item value={option.key} label={option.label}>{option.label}</Select.Item>
+							{/each}
+						</Select.Content>
+					</Select.Root>
+				</div>
+				<div>
+					<Label class="mb-1 block">Nivel de actividad</Label>
+					<Select.Root bind:value={pform.activity} items={ACTIVITY_OPTIONS.map((o) => ({ value: o.key, label: o.label }))}>
+						<Select.Trigger class="w-full">
+							<SelectPrimitive.Value placeholder="Nivel de actividad" />
+						</Select.Trigger>
+						<Select.Content>
+							{#each ACTIVITY_OPTIONS as option}
+								<Select.Item value={option.key} label={option.label}>{option.label}</Select.Item>
+							{/each}
+						</Select.Content>
+					</Select.Root>
+				</div>
+				<div>
+					<Label class="mb-1 block">Objetivo</Label>
+					<Select.Root bind:value={pform.goal} items={GOAL_OPTIONS.map((o) => ({ value: o.key, label: o.label }))}>
+						<Select.Trigger class="w-full">
+							<SelectPrimitive.Value placeholder="Objetivo" />
+						</Select.Trigger>
+						<Select.Content>
+							{#each GOAL_OPTIONS as option}
+								<Select.Item value={option.key} label={option.label}>{option.label}</Select.Item>
+							{/each}
+						</Select.Content>
+					</Select.Root>
+				</div>
+			</div>
+		</details>
 	</CardContent>
 </Card>
 
