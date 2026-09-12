@@ -150,11 +150,24 @@
 		<Button variant="outline" size="icon-sm" onclick={() => shift(-1)} aria-label="Día anterior">
 			<ChevronLeftIcon />
 		</Button>
-		<span class="flex-1 text-center text-sm">{dateLabel}</span>
+		<label
+			class="relative min-w-0 flex-1 cursor-pointer rounded-lg px-2 py-1 text-center text-sm hover:bg-muted has-[input:focus-visible]:ring-2 has-[input:focus-visible]:ring-ring"
+		>
+			<span class="block truncate">{dateLabel}</span>
+			<input
+				type="date"
+				class="absolute inset-0 h-full w-full cursor-pointer opacity-0"
+				value={diary.date}
+				aria-label="Elegir fecha"
+				onchange={(event) => diary.setDate(event.currentTarget.value)}
+			/>
+		</label>
 		<Button variant="outline" size="icon-sm" onclick={() => shift(1)} aria-label="Día siguiente">
 			<ChevronRightIcon />
 		</Button>
-		<Button variant="outline" size="sm" onclick={() => diary.setDate(today())}>Hoy</Button>
+		{#if diary.date !== today()}
+			<Button variant="outline" size="sm" onclick={() => diary.setDate(today())}>Hoy</Button>
+		{/if}
 	</CardContent>
 </Card>
 
@@ -216,6 +229,12 @@
 <Card>
 	<CardContent>
 		<h2 class="mb-3 text-base font-semibold">Comidas ({diary.entries.length})</h2>
+		{#if diary.entries.length === 0}
+			<Button variant="outline" size="sm" class="mb-3 w-full" onclick={() => openAdd()}>
+				<PlusIcon />
+				Añadir tu primer alimento
+			</Button>
+		{/if}
 		{#each groups as group}
 			<div class="group">
 				<div class="flex items-center justify-between gap-2 rounded-lg bg-secondary px-2.5 py-2">
