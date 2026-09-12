@@ -1,7 +1,7 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
 	import { diary, goals, today } from '$lib/stores.svelte';
-	import { fmt, fmtTime, toNumber } from '$lib/format';
+	import { fmt, toNumber } from '$lib/format';
 	import { MEAL_TYPES, suggestMealType, type Entry, type Food, type MealType } from '$lib/db';
 	import MacroBar from '$lib/components/MacroBar.svelte';
 	import FoodPicker from '$lib/components/FoodPicker.svelte';
@@ -229,33 +229,27 @@
 <Card>
 	<CardContent>
 		<h2 class="mb-3 text-base font-semibold">Comidas ({diary.entries.length})</h2>
-		{#if diary.entries.length === 0}
-			<Button variant="outline" size="sm" class="mb-3 w-full" onclick={() => openAdd()}>
-				<PlusIcon />
-				Añadir tu primer alimento
-			</Button>
-		{/if}
 		{#each groups as group}
 			<div class="group">
-				<div class="flex items-center justify-between gap-2 rounded-lg bg-secondary px-2.5 py-2">
-					<div class="flex min-w-0 items-baseline gap-2">
+				<div class="rounded-lg bg-secondary px-2.5 py-2">
+					<div class="flex items-center justify-between gap-2">
 						<strong class="text-sm">{group.label}</strong>
-						{#if group.entries.length > 0}
-							<small class="truncate text-xs text-muted-foreground">
-								{fmt(group.totals.kcal)} kcal · G {fmt(group.totals.fat)} · C {fmt(group.totals.carbs)} · F {fmt(group.totals.fiber)} · P {fmt(group.totals.protein)}
-							</small>
-						{:else}
-							<small class="text-xs text-muted-foreground">Sin registros</small>
-						{/if}
+						<Button
+							variant="ghost"
+							size="icon-sm"
+							aria-label={`Añadir a ${group.label}`}
+							onclick={() => openAdd(group.key)}
+						>
+							<PlusIcon />
+						</Button>
 					</div>
-					<Button
-						variant="ghost"
-						size="icon-sm"
-						aria-label={`Añadir a ${group.label}`}
-						onclick={() => openAdd(group.key)}
-					>
-						<PlusIcon />
-					</Button>
+					{#if group.entries.length > 0}
+						<small class="block text-xs text-muted-foreground">
+							{fmt(group.totals.kcal)} kcal · G {fmt(group.totals.fat)} · C {fmt(group.totals.carbs)} · F {fmt(group.totals.fiber)} · P {fmt(group.totals.protein)}
+						</small>
+					{:else}
+						<small class="block text-xs text-muted-foreground">Sin registros</small>
+					{/if}
 				</div>
 				{#if group.entries.length > 0}
 					<ul>
@@ -299,7 +293,7 @@
 										>
 											<strong class="truncate text-sm">{entry.name}</strong>
 											<small class="text-xs text-muted-foreground">
-												{fmtTime(entry.createdAt)} · {#if entry.units !== undefined}{fmt(entry.units)} ud · {/if}{fmt(entry.grams)} g · {fmt(entry.kcal)} kcal
+												{#if entry.units !== undefined}{fmt(entry.units)} ud · {/if}{fmt(entry.grams)} g · {fmt(entry.kcal)} kcal
 											</small>
 											{#if expandedId === entry.id}
 												<small class="mt-0.5 text-xs text-muted-foreground">

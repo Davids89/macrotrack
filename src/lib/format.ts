@@ -18,11 +18,6 @@ export function fmt(value: number, digits = 1): string {
 	return formatterFor(digits).format(rounded === 0 ? 0 : rounded);
 }
 
-const timeFormatter = new Intl.DateTimeFormat('es-ES', { hour: '2-digit', minute: '2-digit' });
-
-export function fmtTime(ms: number): string {
-	return timeFormatter.format(new Date(ms));
-}
 
 export function fold(s: string): string {
 	return s.normalize('NFD').replace(/\p{Diacritic}/gu, '').toLowerCase();

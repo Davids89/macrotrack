@@ -1,7 +1,7 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
 	import { page } from '$app/state';
-	import { afterNavigate, preloadData } from '$app/navigation';
+	import { preloadData } from '$app/navigation';
 	import favicon from '$lib/assets/favicon.svg';
 	import '../app.css';
 	import { seedIfNeeded } from '$lib/seed';
@@ -24,16 +24,6 @@
 	];
 
 	let profileReady = $state(false);
-	let scrolled = $state(false);
-
-	// Oculta el título al bajar para dejar sitio al contenido; lo recupera cerca del principio.
-	function updateHeader() {
-		const y = window.scrollY;
-		if (scrolled && y < 16) scrolled = false;
-		else if (!scrolled && y > 40) scrolled = true;
-	}
-
-	afterNavigate(() => updateHeader());
 
 	onMount(() => {
 		seedIfNeeded();
@@ -48,9 +38,6 @@
 			preloadData(tab.href).catch(() => {});
 		}
 
-		window.addEventListener('scroll', updateHeader, { passive: true });
-		updateHeader();
-
 		// iOS Safari ignora user-scalable=no: bloquea el zoom por pinza con sus eventos propios.
 		const preventGesture = (event: Event) => event.preventDefault();
 		document.addEventListener('gesturestart', preventGesture, { passive: false });
@@ -58,7 +45,6 @@
 		document.addEventListener('gestureend', preventGesture, { passive: false });
 
 		return () => {
-			window.removeEventListener('scroll', updateHeader);
 			document.removeEventListener('gesturestart', preventGesture);
 			document.removeEventListener('gesturechange', preventGesture);
 			document.removeEventListener('gestureend', preventGesture);
@@ -75,11 +61,9 @@
 	<Onboarding />
 {:else}
 	<div class="mx-auto flex max-w-[640px] flex-col gap-4 p-4 pb-28 pt-[calc(env(safe-area-inset-top)+1rem)]">
-		{#if !scrolled}
-			<header class="flex items-center justify-center pt-1">
-				<strong class="text-lg font-bold">MacroTrack</strong>
-			</header>
-		{/if}
+		<header class="flex items-center justify-center pt-1">
+			<strong class="text-lg font-bold">MacroTrack</strong>
+		</header>
 		<main class="flex flex-col gap-4">{@render children()}</main>
 	</div>
 
