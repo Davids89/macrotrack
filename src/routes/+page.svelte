@@ -18,13 +18,14 @@
 	import PencilIcon from '@lucide/svelte/icons/pencil';
 	import Trash2Icon from '@lucide/svelte/icons/trash-2';
 
-	const dateLabel = $derived(
-		new Date(diary.date + 'T12:00:00').toLocaleDateString('es-ES', {
+	const dateLabel = $derived.by(() => {
+		const label = new Date(diary.date + 'T12:00:00').toLocaleDateString('es-ES', {
 			weekday: 'long',
 			day: 'numeric',
 			month: 'long'
-		})
-	);
+		});
+		return label.charAt(0).toUpperCase() + label.slice(1);
+	});
 
 	const groups = $derived.by(() =>
 		MEAL_TYPES.map((type) => {
@@ -102,7 +103,7 @@
 		<Button variant="outline" size="icon-sm" onclick={() => shift(-1)} aria-label="Día anterior">
 			<ChevronLeftIcon />
 		</Button>
-		<span class="flex-1 text-center text-sm capitalize">{dateLabel}</span>
+		<span class="flex-1 text-center text-sm">{dateLabel}</span>
 		<Button variant="outline" size="icon-sm" onclick={() => shift(1)} aria-label="Día siguiente">
 			<ChevronRightIcon />
 		</Button>

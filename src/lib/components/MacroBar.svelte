@@ -25,7 +25,7 @@
 		<span class="text-muted-foreground">{label}</span>
 		<span class="flex items-baseline gap-1.5">
 			<span class={cn('font-semibold', valueColor)}>
-				{fmt(value)} <span class="font-normal text-muted-foreground">/{fmt(goal)} {unit}</span>
+				{fmt(value)} <span class="font-normal text-muted-foreground">/ {fmt(goal)} {unit}</span>
 			</span>
 			<span class={cn('text-xs font-medium tabular-nums', deltaColor)} aria-label={`Diferencia ${deltaLabel} ${unit}`}>
 				({deltaLabel} {unit})
