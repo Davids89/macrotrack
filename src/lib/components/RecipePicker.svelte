@@ -1,9 +1,10 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
 	import { db, MEAL_TYPES, suggestMealType, type MealType, type Recipe } from '$lib/db';
-	import { fmt } from '$lib/format';
+	import { fmt, toNumber } from '$lib/format';
 	import { recipeGrams, recipeTotals } from '$lib/recipes';
 	import { Button } from '$lib/components/ui/button';
+	import { Input } from '$lib/components/ui/input';
 	import { Label } from '$lib/components/ui/label';
 	import * as Select from '$lib/components/ui/select';
 	import { Select as SelectPrimitive } from 'bits-ui';
@@ -12,7 +13,7 @@
 		onAdd,
 		initialMealType
 	}: {
-		onAdd: (recipe: Recipe, mealType: MealType) => void;
+		onAdd: (recipe: Recipe, mealType: MealType, grams: number) => void;
 		initialMealType?: MealType;
 	} = $props();
 
@@ -20,6 +21,18 @@
 
 	let recipes = $state<Recipe[]>([]);
 	let mealType = $state<MealType>(defaultMealType());
+	let selected = $state<Recipe | null>(null);
+	let grams = $state('');
+
+	function pick(recipe: Recipe) {
+		selected = recipe;
+		grams = String(Math.round(recipeGrams(recipe.items)));
+	}
+
+	function add() {
+		if (!selected || !(toNumber(grams) > 0)) return;
+		onAdd(selected, mealType, toNumber(grams));
+	}
 
 	onMount(async () => {
 		recipes = await db.recipes.orderBy('name').toArray();
@@ -50,14 +63,16 @@
 			Aún no tienes recetas. Créalas en <a class="underline" href="/foods">Alimentos › Recetas</a>.
 		</p>
 	{:else}
-		<p class="text-xs text-muted-foreground">Cada receta entra como una ración y una sola comida.</p>
+		<p class="text-xs text-muted-foreground">
+			Cada receta entra como una sola comida; ajusta los gramos si comiste más o menos.
+		</p>
 		<ul class="flex max-h-64 flex-col gap-1 overflow-auto">
 			{#each recipes as recipe (recipe.id)}
 				<li>
 					<Button
 						variant="ghost"
 						class="h-auto min-h-8 w-full items-start justify-between gap-2 py-2 font-normal"
-						onclick={() => onAdd(recipe, mealType)}
+						onclick={() => pick(recipe)}
 					>
 						<span class="min-w-0 flex-1 whitespace-normal break-words text-left">{recipe.name}</span>
 						<span class="shrink-0 text-xs text-muted-foreground">{summary(recipe)}</span>
@@ -65,5 +80,22 @@
 				</li>
 			{/each}
 		</ul>
+		{#if selected}
+			<div class="flex flex-col gap-2.5 rounded-lg border border-border bg-card p-3">
+				<div class="flex items-center justify-between gap-2">
+					<strong class="min-w-0 flex-1 truncate text-sm">{selected.name}</strong>
+					<small class="shrink-0 text-muted-foreground">
+						receta entera: {fmt(recipeGrams(selected.items))} g
+					</small>
+				</div>
+				<div class="flex items-end gap-2">
+					<div class="min-w-0 flex-1">
+						<Label class="mb-1 block">Gramos</Label>
+						<Input type="text" min="1" bind:value={grams} inputmode="decimal" />
+					</div>
+					<Button onclick={add} disabled={!(toNumber(grams) > 0)}>Añadir</Button>
+				</div>
+			</div>
+		{/if}
 	{/if}
 </div>

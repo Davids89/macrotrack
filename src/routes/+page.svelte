@@ -102,8 +102,8 @@
 		addOpen = false;
 	}
 
-	async function handleAddRecipe(recipe: Recipe, mealType: MealType) {
-		await diary.addRecipe(recipe, mealType);
+	async function handleAddRecipe(recipe: Recipe, mealType: MealType, grams: number) {
+		await diary.addRecipe(recipe, mealType, grams);
 		addOpen = false;
 	}
 
