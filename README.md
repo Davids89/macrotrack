@@ -13,7 +13,7 @@ Sin cuentas, sin anuncios, sin sincronizar nada a la nube. Tus registros no sale
 - **Diario por días** — registra alimentos por comidas (desayuno, comida, snack, cena) y ve al instante tus totales de kcal, proteínas, hidratos, grasas y fibra frente a tus objetivos.
 - **Escáner de código de barras** — apunta con la cámara al producto y resuélvelo automáticamente contra OpenFoodFacts (base de datos pública y gratuita). Cada producto se consulta una sola vez; después vive en tu dispositivo y funciona **offline**.
 - **Base de datos de alimentos** — catálogo inicial de 23 alimentos comunes; añade los tuyos a mano o buscando por nombre en OpenFoodFacts.
-- **Recetas** — en la pestaña Alimentos, combina alimentos de tu base de datos en una receta y ve sus macros. Cada receta es una ración: pon las cantidades de un solo plato. Cada ingrediente guarda sus macros, así que la receta no cambia si luego editas o borras el alimento. Desde el diario puedes añadir una receta entera como una sola comida, sin registrar los alimentos uno a uno.
+- **Recetas** — en la pestaña Alimentos, combina alimentos de tu base de datos en una receta y ve sus macros. Cada receta es una ración: pon las cantidades de un solo plato. Cada ingrediente guarda sus macros, así que la receta no cambia si luego editas o borras el alimento. Desde el diario puedes añadir una receta entera como una sola comida (ajustando los gramos si ese día comiste más o menos) o crear una receta nueva sobre la marcha. **Compártelas con un QR**: el código lleva la receta entera dentro del enlace, así que el otro móvil solo tiene que escanearlo con la cámara y confirmar; no pasa por ningún servidor.
 - **Objetivos calculados para ti** — tu perfil (altura, peso, edad, sexo, actividad, objetivo) calcula tus dianas con la fórmula de Harris-Benedict: perder grasa, recomposición, mantener o ganar músculo.
 - **Registro de peso** — pesate y guarda tu peso diario (con hora); gráfica de tendencia de 30 días y últimos registros.
 - **Días completos** — confirma explícitamente que has registrado todo el día, desde el diario o seleccionando varios días en Estadísticas. Puedes desmarcarlos; editar comidas mantiene la confirmación. Los días anteriores quedan sin confirmar hasta que los revises.
@@ -52,6 +52,7 @@ src/lib/stores.svelte.ts    # estado global (diario, objetivos, perfil, peso)
 src/lib/format.ts           # utilidades numéricas (coma decimal incluida)
 src/lib/weekly.ts           # semanas naturales y balance de días completos
 src/lib/recipes.ts          # ingredientes y totales de recetas
+src/lib/share.ts            # recetas compartidas dentro del enlace del QR
 src/routes/+page.svelte     # diario
 src/routes/stats/+page.svelte   # resumen semanal, confirmación por lotes y gráficas
 src/routes/foods/+page.svelte   # pestañas Alimentos / Recetas (FoodList y RecipeList)

@@ -1,10 +1,11 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
-	import { db, MEAL_TYPES, suggestMealType, type MealType, type Recipe } from '$lib/db';
+	import { db, MEAL_TYPES, suggestMealType, type MealType, type Recipe, type RecipeItem } from '$lib/db';
 	import { fmt, toNumber } from '$lib/format';
 	import { recipeGrams, recipeTotals } from '$lib/recipes';
 	import { Button } from '$lib/components/ui/button';
 	import { Input } from '$lib/components/ui/input';
+	import RecipeForm from './RecipeForm.svelte';
 	import { Label } from '$lib/components/ui/label';
 	import * as Select from '$lib/components/ui/select';
 	import { Select as SelectPrimitive } from 'bits-ui';
@@ -23,6 +24,16 @@
 	let mealType = $state<MealType>(defaultMealType());
 	let selected = $state<Recipe | null>(null);
 	let grams = $state('');
+	let creating = $state(false);
+
+	/** La receta nueva se guarda en la base de datos para reutilizarla, y queda elegida
+	 *  para ajustar los gramos antes de añadirla al diario. */
+	async function saveNew(data: { name: string; items: RecipeItem[] }) {
+		const id = await db.recipes.add({ ...data, createdAt: Date.now() });
+		recipes = await db.recipes.orderBy('name').toArray();
+		creating = false;
+		pick({ ...data, id, createdAt: Date.now() });
+	}
 
 	function pick(recipe: Recipe) {
 		selected = recipe;
@@ -58,9 +69,16 @@
 			</Select.Content>
 		</Select.Root>
 	</div>
-	{#if recipes.length === 0}
+	<Button variant="outline" size="sm" onclick={() => (creating = !creating)}>
+		{creating ? 'Cancelar' : 'Nueva receta'}
+	</Button>
+	{#if creating}
+		<div class="rounded-lg border border-border bg-card p-3">
+			<RecipeForm submitLabel="Guardar y elegir" onSave={saveNew} />
+		</div>
+	{:else if recipes.length === 0}
 		<p class="text-sm text-muted-foreground">
-			Aún no tienes recetas. Créalas en <a class="underline" href="/foods">Alimentos › Recetas</a>.
+			Aún no tienes recetas. Crea una aquí o en <a class="underline" href="/foods">Alimentos › Recetas</a>.
 		</p>
 	{:else}
 		<p class="text-xs text-muted-foreground">
