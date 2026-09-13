@@ -66,6 +66,7 @@
 	let showHelper = $state(false);
 	let addOpen = $state(false);
 	let addMealType = $state<MealType>(suggestMealType());
+	let addFilterMealType = $state<MealType | undefined>(undefined);
 	let addTab = $state<'alimento' | 'receta'>('alimento');
 	let viewport = $state({ top: 0, height: 0 });
 
@@ -93,6 +94,7 @@
 
 	function openAdd(mealType?: MealType) {
 		addMealType = mealType ?? suggestMealType();
+		addFilterMealType = mealType;
 		addTab = 'alimento';
 		addOpen = true;
 	}
@@ -374,7 +376,7 @@
 		{#if addTab === 'alimento'}
 			<FoodPicker initialMealType={addMealType} onAdd={handleAdd} />
 		{:else}
-			<RecipePicker initialMealType={addMealType} onAdd={handleAddRecipe} />
+			<RecipePicker initialMealType={addFilterMealType} onAdd={handleAddRecipe} />
 		{/if}
 	</Dialog.Content>
 </Dialog.Root>
