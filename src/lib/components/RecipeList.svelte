@@ -1,33 +1,65 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
-	import { db, type Food, type Recipe, type RecipeItem } from '$lib/db';
+	import { db, type Recipe, type RecipeItem } from '$lib/db';
 	import { fmt } from '$lib/format';
-	import { recipeGrams, recipeItem, recipeTotals } from '$lib/recipes';
-	import FoodPicker from './FoodPicker.svelte';
+	import { recipeGrams, recipeTotals } from '$lib/recipes';
+	import { decodeRecipe, recipeShareUrl } from '$lib/share';
+	import { BrowserQRCodeSvgWriter } from '@zxing/library';
+	import RecipeForm from './RecipeForm.svelte';
 	import ConfirmDialog from './ConfirmDialog.svelte';
 	import * as Dialog from '$lib/components/ui/dialog';
 	import { Card, CardContent } from '$lib/components/ui/card';
 	import { Button } from '$lib/components/ui/button';
-	import { Input } from '$lib/components/ui/input';
-	import { Label } from '$lib/components/ui/label';
 	import PencilIcon from '@lucide/svelte/icons/pencil';
 	import Trash2Icon from '@lucide/svelte/icons/trash-2';
-	import XIcon from '@lucide/svelte/icons/x';
+	import Share2Icon from '@lucide/svelte/icons/share-2';
 
 	let recipes = $state<Recipe[]>([]);
 	let showForm = $state(false);
-	let editingId = $state<number | null>(null);
-	let name = $state('');
-	let items = $state<RecipeItem[]>([]);
-	let formError = $state('');
+	let editing = $state<Recipe | null>(null);
 	let saved = $state<string | null>(null);
 	let confirmRecipe = $state<Recipe | null>(null);
 	let detail = $state<Recipe | null>(null);
+	let sharing = $state<Recipe | null>(null);
+	let shareUrl = $state('');
+	let copied = $state(false);
+	let qrBox = $state<HTMLDivElement | null>(null);
+	let importing = $state<{ name: string; items: RecipeItem[] } | null>(null);
+	let importError = $state('');
+	const canShare = typeof navigator !== 'undefined' && typeof navigator.share === 'function';
 
-	const totals = $derived(recipeTotals(items));
+	$effect(() => {
+		if (!qrBox || !shareUrl) return;
+		qrBox.replaceChildren(new BrowserQRCodeSvgWriter().write(shareUrl, 220, 220));
+	});
+
+	function share(recipe: Recipe) {
+		detail = null;
+		copied = false;
+		sharing = recipe;
+		shareUrl = recipeShareUrl(recipe, location.origin);
+	}
+
+	async function sendLink() {
+		try {
+			if (canShare) {
+				await navigator.share({ title: sharing?.name, url: shareUrl });
+				return;
+			}
+			await navigator.clipboard.writeText(shareUrl);
+			copied = true;
+		} catch {
+			// el usuario canceló o el navegador no deja copiar: el enlace sigue visible
+		}
+	}
 
 	onMount(() => {
 		void refresh();
+		// Enlace compartido: /foods#r=<receta>
+		if (!location.hash.startsWith('#r=')) return;
+		importing = decodeRecipe(location.hash);
+		if (!importing) importError = 'El enlace de receta no es válido o está incompleto.';
+		history.replaceState(null, '', location.pathname);
 	});
 
 	async function refresh() {
@@ -39,58 +71,30 @@
 		return `${fmt(t.kcal, 0)} kcal · G ${fmt(t.fat)} · C ${fmt(t.carbs)} · F ${fmt(t.fiber)} · P ${fmt(t.protein)}`;
 	}
 
-	function addFood(food: Food, grams: number, _mealType: unknown, units?: number) {
-		items = [...items, recipeItem(food, grams, units)];
-		formError = '';
-	}
-
-	function removeItem(index: number) {
-		items = items.filter((_, i) => i !== index);
-	}
-
 	function newRecipe() {
-		editingId = null;
-		name = '';
-		items = [];
-		formError = '';
+		editing = null;
 		showForm = true;
 	}
 
 	function edit(recipe: Recipe) {
-		editingId = recipe.id ?? null;
-		name = recipe.name;
-		items = recipe.items.map((item) => ({ ...item }));
-		formError = '';
+		editing = recipe;
 		showForm = true;
 		window.scrollTo({ top: 0, behavior: 'smooth' });
 	}
 
 	function cancel() {
 		showForm = false;
-		editingId = null;
-		name = '';
-		items = [];
-		formError = '';
+		editing = null;
 	}
 
-	async function save() {
-		const trimmed = name.trim();
-		if (!trimmed) {
-			formError = 'Ponle un nombre a la receta';
-			return;
-		}
-		if (items.length === 0) {
-			formError = 'Añade al menos un alimento';
-			return;
-		}
-		const data = { name: trimmed, items: $state.snapshot(items) };
-		if (editingId !== null) {
-			await db.recipes.update(editingId, data);
+	async function save(data: { name: string; items: RecipeItem[] }) {
+		if (editing?.id !== undefined) {
+			await db.recipes.update(editing.id, data);
 		} else {
 			await db.recipes.add({ ...data, createdAt: Date.now() });
 		}
 		cancel();
-		saved = trimmed;
+		saved = data.name;
 		await refresh();
 	}
 
@@ -109,51 +113,21 @@
 				{showForm ? 'Cancelar' : 'Nueva receta'}
 			</Button>
 		</div>
+		{#if importError}<p role="alert" class="text-sm text-destructive">{importError}</p>{/if}
 		{#if saved && !showForm}
 			<p class="text-xs text-muted-foreground">«{saved}» guardada ✓</p>
 		{/if}
 
 		{#if showForm}
 			<div class="flex flex-col gap-2.5 rounded-lg border border-border bg-card p-3">
-				<h3 class="text-sm font-semibold">{editingId !== null ? 'Editar receta' : 'Nueva receta'}</h3>
-				{#if formError}<p class="text-sm text-destructive">{formError}</p>{/if}
-				<div>
-					<Label class="mb-1 block">Nombre</Label>
-					<Input bind:value={name} placeholder="Ej: Ensalada de garbanzos" />
-					<p class="mt-1 text-xs text-muted-foreground">
-						Una receta es una ración: pon las cantidades de un solo plato.
-					</p>
-				</div>
-				<FoodPicker onAdd={addFood} showMealType={false} />
-				{#if items.length > 0}
-					<ul>
-						{#each items as item, index (index)}
-							<li class="flex items-center justify-between gap-2 border-b border-border py-2 last:border-b-0">
-								<div class="flex min-w-0 flex-col gap-0.5">
-									<strong class="text-sm">{item.name}</strong>
-									<small class="text-xs text-muted-foreground">
-										{#if item.units}{fmt(item.units)} ud · {/if}{fmt(item.grams)} g · {fmt(item.kcal, 0)} kcal
-									</small>
-								</div>
-								<Button
-									variant="ghost"
-									size="icon-sm"
-									class="text-destructive hover:text-destructive"
-									onclick={() => removeItem(index)}
-									title="Quitar de la receta"
-									aria-label="Quitar de la receta"
-								>
-									<XIcon />
-								</Button>
-							</li>
-						{/each}
-					</ul>
-					<p class="text-sm">
-						<strong>Ración</strong>
-						<span class="text-muted-foreground"> · {fmt(recipeGrams(items))} g · {macroLine({ items })}</span>
-					</p>
-				{/if}
-				<Button onclick={save}>{editingId !== null ? 'Guardar cambios' : 'Guardar receta'}</Button>
+				<h3 class="text-sm font-semibold">{editing ? 'Editar receta' : 'Nueva receta'}</h3>
+				{#key editing?.id ?? 'nueva'}
+					<RecipeForm
+						initial={editing ?? undefined}
+						submitLabel={editing ? 'Guardar cambios' : 'Guardar receta'}
+						onSave={save}
+					/>
+				{/key}
 			</div>
 		{/if}
 
@@ -227,7 +201,11 @@
 				<strong>Ración</strong>
 				<span class="text-muted-foreground"> · {macroLine(detail)}</span>
 			</p>
-			<div class="flex justify-end">
+			<div class="flex justify-end gap-2">
+				<Button variant="outline" onclick={() => detail && share(detail)}>
+					<Share2Icon />
+					Compartir
+				</Button>
 				<Button
 					variant="outline"
 					onclick={() => {
@@ -249,4 +227,43 @@
 		if (confirmRecipe) await remove(confirmRecipe);
 	}}
 	onClose={() => (confirmRecipe = null)}
+/>
+
+<Dialog.Root
+	open={sharing !== null}
+	onOpenChange={(open) => {
+		if (!open) {
+			sharing = null;
+			shareUrl = '';
+		}
+	}}
+>
+	<Dialog.Content class="overflow-y-auto overscroll-contain">
+		{#if sharing}
+			<Dialog.Header>
+				<Dialog.Title>Compartir «{sharing.name}»</Dialog.Title>
+				<Dialog.Description>
+					Escanea el código con la cámara del otro móvil: la receta viaja entera dentro del enlace, sin pasar por ningún servidor.
+				</Dialog.Description>
+			</Dialog.Header>
+			<div class="flex justify-center rounded-lg bg-white p-3">
+				<div bind:this={qrBox}></div>
+			</div>
+			<Button variant="outline" onclick={sendLink}>
+				{copied ? 'Enlace copiado ✓' : canShare ? 'Compartir enlace…' : 'Copiar enlace'}
+			</Button>
+		{/if}
+	</Dialog.Content>
+</Dialog.Root>
+
+<ConfirmDialog
+	open={importing !== null}
+	title="Importar receta"
+	message={importing
+		? `¿Guardar «${importing.name}» (${importing.items.length} ${importing.items.length === 1 ? 'alimento' : 'alimentos'} · ${fmt(recipeGrams(importing.items))} g) en tus recetas?`
+		: ''}
+	onConfirm={async () => {
+		if (importing) await save({ name: importing.name, items: importing.items });
+	}}
+	onClose={() => (importing = null)}
 />

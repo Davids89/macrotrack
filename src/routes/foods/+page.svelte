@@ -1,9 +1,15 @@
 <script lang="ts">
+	import { onMount } from 'svelte';
 	import FoodList from '$lib/components/FoodList.svelte';
 	import RecipeList from '$lib/components/RecipeList.svelte';
 	import { Button } from '$lib/components/ui/button';
 
 	let tab = $state<'alimentos' | 'recetas'>('alimentos');
+
+	// Un enlace compartido (/foods#r=…) abre directo en Recetas, que es quien lo importa.
+	onMount(() => {
+		if (location.hash.startsWith('#r=')) tab = 'recetas';
+	});
 </script>
 
 <div class="flex gap-0.5 rounded-lg border border-border bg-card p-0.5">
