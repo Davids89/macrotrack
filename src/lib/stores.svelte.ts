@@ -1,4 +1,5 @@
-import { db, setDaysComplete, suggestMealType, type Entry, type Food, type MealType, type Weight } from './db';
+import { db, setDaysComplete, suggestMealType, type Entry, type Food, type MealType, type Recipe, type Weight } from './db';
+import { recipeGrams, recipeTotals } from './recipes';
 import {
 	computeGoals,
 	foodAtGrams,
@@ -112,6 +113,23 @@ class DiaryStore {
 			unitSize: units !== undefined ? food.unitSize : undefined,
 			mealType,
 			...totals,
+			createdAt: Date.now()
+		});
+		await this.load();
+	}
+
+	/** Una receta entra como una sola comida: sus macros ya están calculadas en los ingredientes.
+	 *  Si se comió más o menos que la receta entera, `grams` la escala proporcionalmente. */
+	async addRecipe(recipe: Recipe, mealType: MealType = suggestMealType(), grams?: number) {
+		const base = recipeGrams(recipe.items);
+		const totals = recipeTotals(recipe.items);
+		const eaten = grams ?? base;
+		await db.entries.add({
+			date: this.date,
+			name: recipe.name,
+			grams: eaten,
+			mealType,
+			...(eaten === base ? totals : scaleTotals(totals, eaten, base)),
 			createdAt: Date.now()
 		});
 		await this.load();

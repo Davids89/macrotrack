@@ -15,10 +15,12 @@
 
 	let {
 		onAdd,
-		initialMealType
+		initialMealType,
+		showMealType = true
 	}: {
 		onAdd: (food: Food, grams: number, mealType: MealType, units?: number) => void;
 		initialMealType?: MealType;
+		showMealType?: boolean;
 	} = $props();
 
 	const defaultMealType = () => initialMealType ?? suggestMealType();
@@ -155,19 +157,21 @@
 						<Input type="text" min="1" bind:value={grams} inputmode="decimal" />
 					{/if}
 				</div>
-				<div class="min-w-0 flex-1">
-					<Label class="mb-1 block">Tipo</Label>
-					<Select.Root bind:value={mealType}>
-						<Select.Trigger class="w-full">
-							<SelectPrimitive.Value placeholder="Tipo" />
-						</Select.Trigger>
-						<Select.Content>
-							{#each MEAL_TYPES as type}
-								<Select.Item value={type.key}>{type.label}</Select.Item>
-							{/each}
-						</Select.Content>
-					</Select.Root>
-				</div>
+				{#if showMealType}
+					<div class="min-w-0 flex-1">
+						<Label class="mb-1 block">Tipo</Label>
+						<Select.Root bind:value={mealType}>
+							<Select.Trigger class="w-full">
+								<SelectPrimitive.Value placeholder="Tipo" />
+							</Select.Trigger>
+							<Select.Content>
+								{#each MEAL_TYPES as type}
+									<Select.Item value={type.key}>{type.label}</Select.Item>
+								{/each}
+							</Select.Content>
+						</Select.Root>
+					</div>
+				{/if}
 				<Button onclick={add} disabled={!canAdd}>Añadir</Button>
 			</div>
 		</div>

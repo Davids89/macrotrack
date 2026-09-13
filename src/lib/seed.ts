@@ -1,4 +1,5 @@
-import { db, type Food } from './db';
+import { db, type Food, type RecipeItem } from './db';
+import { recipeItem } from './recipes';
 
 export const SEED_FOODS: Omit<Food, 'id' | 'createdAt'>[] = [
 	{ name: 'Fresas', base: 100, kcal: 32, protein: 0.7, carbs: 7.7, fat: 0.3, fiber: 2, source: 'builtin' },
@@ -8,6 +9,7 @@ export const SEED_FOODS: Omit<Food, 'id' | 'createdAt'>[] = [
 	{ name: 'Sandía', base: 100, kcal: 30, protein: 0.6, carbs: 7.6, fat: 0.2, fiber: 0.4, source: 'builtin' },
 	{ name: 'Melón', base: 100, kcal: 34, protein: 0.8, carbs: 8.2, fat: 0.2, fiber: 0.9, source: 'builtin' },
 	{ name: 'Tomate', base: 100, kcal: 18, protein: 0.9, carbs: 3.9, fat: 0.2, fiber: 1.2, source: 'builtin' },
+	{ name: 'Tomate triturado', base: 100, kcal: 23, protein: 1.1, carbs: 3.8, fat: 0, fiber: 0, source: 'builtin' },
 	{ name: 'Pepino', base: 100, kcal: 15, protein: 0.7, carbs: 3.6, fat: 0.1, fiber: 0.5, source: 'builtin' },
 	{ name: 'Plátano', base: 100, kcal: 89, protein: 1.1, carbs: 22.8, fat: 0.3, fiber: 2.6, source: 'builtin' },
 	{ name: 'Manzana', base: 100, kcal: 52, protein: 0.3, carbs: 13.8, fat: 0.2, fiber: 2.4, source: 'builtin' },
@@ -20,6 +22,7 @@ export const SEED_FOODS: Omit<Food, 'id' | 'createdAt'>[] = [
 	{ name: 'Pan integral', base: 100, kcal: 247, protein: 13, carbs: 41, fat: 3.4, fiber: 7, source: 'builtin' },
 	{ name: 'Avena', base: 100, kcal: 389, protein: 16.9, carbs: 66.3, fat: 6.9, fiber: 10.6, source: 'builtin' },
 	{ name: 'Lentejas cocidas', base: 100, kcal: 116, protein: 9, carbs: 20, fat: 0.4, fiber: 7.9, source: 'builtin' },
+	{ name: 'Garbanzos cocidos', base: 100, kcal: 108, protein: 6.8, carbs: 14, fat: 2.2, fiber: 0, source: 'builtin' },
 	{ name: 'Pechuga de pollo', base: 100, kcal: 165, protein: 31, carbs: 0, fat: 3.6, fiber: 0, source: 'builtin' },
 	{ name: 'Salmón', base: 100, kcal: 208, protein: 20, carbs: 0, fat: 13, fiber: 0, source: 'builtin' },
 	{ name: 'Atún en lata', base: 100, kcal: 132, protein: 28, carbs: 0, fat: 1, fiber: 0, source: 'builtin' },
@@ -33,10 +36,51 @@ export const SEED_FOODS: Omit<Food, 'id' | 'createdAt'>[] = [
 	{ name: 'Aceite de oliva', base: 100, kcal: 884, protein: 0, carbs: 0, fat: 100, fiber: 0, source: 'builtin' }
 ];
 
+/** Recetas de ejemplo: los ingredientes se resuelven por nombre contra el catálogo al sembrarlas. */
+export const SEED_RECIPES: { name: string; items: { food: string; grams: number }[] }[] = [
+	{
+		name: 'Guiso de garbanzos con huevo y pollo',
+		items: [
+			{ food: 'Garbanzos cocidos', grams: 180 },
+			{ food: 'Pechuga de pollo', grams: 100 },
+			{ food: 'Patata cocida', grams: 110 },
+			{ food: 'Zanahoria', grams: 70 },
+			{ food: 'Huevo', grams: 60 },
+			{ food: 'Aceite de oliva', grams: 5 }
+		]
+	}
+];
+
+const key = (name: string) => name.trim().toLowerCase();
+
 export async function seedIfNeeded() {
-	const existing = new Set((await db.foods.toArray()).map((food) => food.name.trim().toLowerCase()));
-	const missing = SEED_FOODS.filter((food) => !existing.has(food.name.trim().toLowerCase()));
+	const existing = new Set((await db.foods.toArray()).map((food) => key(food.name)));
+	const missing = SEED_FOODS.filter((food) => !existing.has(key(food.name)));
+	if (missing.length > 0) {
+		const now = Date.now();
+		await db.foods.bulkAdd(missing.map((food) => ({ ...food, createdAt: now })));
+	}
+	await seedRecipes();
+}
+
+async function seedRecipes() {
+	const existing = new Set((await db.recipes.toArray()).map((recipe) => key(recipe.name)));
+	const missing = SEED_RECIPES.filter((recipe) => !existing.has(key(recipe.name)));
 	if (missing.length === 0) return;
+	const foods = new Map((await db.foods.toArray()).map((food) => [key(food.name), food]));
 	const now = Date.now();
-	await db.foods.bulkAdd(missing.map((food) => ({ ...food, createdAt: now })));
+	const recipes = missing
+		.map((recipe) => ({
+			name: recipe.name,
+			items: recipe.items
+				.map(({ food, grams }) => {
+					const match = foods.get(key(food));
+					return match && recipeItem(match, grams);
+				})
+				.filter((item): item is RecipeItem => !!item),
+			createdAt: now
+		}))
+		// Si falta algún ingrediente en el catálogo, mejor no sembrar la receta a medias.
+		.filter((recipe, index) => recipe.items.length === missing[index].items.length);
+	if (recipes.length > 0) await db.recipes.bulkAdd(recipes);
 }

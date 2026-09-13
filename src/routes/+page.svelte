@@ -2,9 +2,10 @@
 	import { onMount } from 'svelte';
 	import { diary, goals, today } from '$lib/stores.svelte';
 	import { fmt, toNumber } from '$lib/format';
-	import { MEAL_TYPES, suggestMealType, type Entry, type Food, type MealType } from '$lib/db';
+	import { MEAL_TYPES, suggestMealType, type Entry, type Food, type MealType, type Recipe } from '$lib/db';
 	import MacroBar from '$lib/components/MacroBar.svelte';
 	import FoodPicker from '$lib/components/FoodPicker.svelte';
+	import RecipePicker from '$lib/components/RecipePicker.svelte';
 	import ConfirmDialog from '$lib/components/ConfirmDialog.svelte';
 	import { Card, CardContent } from '$lib/components/ui/card';
 	import { Button } from '$lib/components/ui/button';
@@ -65,6 +66,7 @@
 	let showHelper = $state(false);
 	let addOpen = $state(false);
 	let addMealType = $state<MealType>(suggestMealType());
+	let addTab = $state<'alimento' | 'receta'>('alimento');
 	let viewport = $state({ top: 0, height: 0 });
 
 	// Con el teclado abierto iOS desplaza el viewport visual y descuadra el diálogo fijo.
@@ -91,11 +93,17 @@
 
 	function openAdd(mealType?: MealType) {
 		addMealType = mealType ?? suggestMealType();
+		addTab = 'alimento';
 		addOpen = true;
 	}
 
 	async function handleAdd(food: Food, grams: number, mealType: MealType, units?: number) {
 		await diary.addFood(food, grams, mealType, units);
+		addOpen = false;
+	}
+
+	async function handleAddRecipe(recipe: Recipe, mealType: MealType, grams: number) {
+		await diary.addRecipe(recipe, mealType, grams);
 		addOpen = false;
 	}
 
@@ -345,9 +353,29 @@
 <Dialog.Root bind:open={addOpen}>
 	<Dialog.Content class="overflow-y-auto overscroll-contain" style={dialogStyle}>
 		<Dialog.Header>
-			<Dialog.Title>Añadir alimento</Dialog.Title>
+			<Dialog.Title>Añadir al diario</Dialog.Title>
 		</Dialog.Header>
-		<FoodPicker initialMealType={addMealType} onAdd={handleAdd} />
+		<div class="flex gap-0.5 rounded-lg border border-border bg-card p-0.5">
+			<Button
+				variant="ghost"
+				size="sm"
+				class="flex-1 {addTab === 'alimento' ? 'bg-secondary text-foreground' : ''}"
+				aria-pressed={addTab === 'alimento'}
+				onclick={() => (addTab = 'alimento')}
+			>Alimento</Button>
+			<Button
+				variant="ghost"
+				size="sm"
+				class="flex-1 {addTab === 'receta' ? 'bg-secondary text-foreground' : ''}"
+				aria-pressed={addTab === 'receta'}
+				onclick={() => (addTab = 'receta')}
+			>Receta</Button>
+		</div>
+		{#if addTab === 'alimento'}
+			<FoodPicker initialMealType={addMealType} onAdd={handleAdd} />
+		{:else}
+			<RecipePicker initialMealType={addMealType} onAdd={handleAddRecipe} />
+		{/if}
 	</Dialog.Content>
 </Dialog.Root>
 
