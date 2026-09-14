@@ -56,7 +56,6 @@
 	const kcalPct = $derived(goals.kcal > 0 ? Math.min(100, (diary.totals.kcal / goals.kcal) * 100) : 0);
 
 	let editingId = $state<number | null>(null);
-	let expandedId = $state<number | null>(null);
 	let editGrams = $state('100');
 	let editUnits = $state('1');
 	let editType = $state<MealType>('comida');
@@ -121,7 +120,6 @@
 
 	function startEdit(entry: Entry) {
 		editingId = entry.id!;
-		expandedId = null;
 		editGrams = String(entry.grams);
 		editUnits = String(entry.units ?? 1);
 		editType = entry.mealType ?? 'comida';
@@ -290,22 +288,17 @@
 									</div>
 								{:else}
 									<div class="flex items-center gap-2">
-										<button
-											type="button"
-											class="flex min-w-0 flex-1 flex-col gap-0.5 text-left"
-											aria-expanded={expandedId === entry.id}
-											onclick={() => (expandedId = expandedId === entry.id ? null : entry.id!)}
-										>
-											<strong class="truncate text-sm">{entry.name}</strong>
-											<small class="text-xs text-muted-foreground">
-												{#if entry.units !== undefined}{fmt(entry.units)} ud · {/if}{fmt(entry.grams)} g · {fmt(entry.kcal)} kcal
-											</small>
-											{#if expandedId === entry.id}
-												<small class="mt-0.5 text-xs text-muted-foreground">
-													G {fmt(entry.fat)} · C {fmt(entry.carbs)} · F {fmt(entry.fiber)} · P {fmt(entry.protein)}
+										<div class="flex min-w-0 flex-1 flex-col gap-0.5">
+											<div class="flex items-baseline justify-between gap-2">
+												<strong class="min-w-0 truncate text-sm">{entry.name}</strong>
+												<small class="shrink-0 whitespace-nowrap text-xs text-muted-foreground">
+													{#if entry.units !== undefined}{fmt(entry.units)} ud · {/if}{fmt(entry.grams)} g
 												</small>
-											{/if}
-										</button>
+											</div>
+											<small class="truncate text-xs text-muted-foreground">
+												{fmt(entry.kcal)} kcal · G {fmt(entry.fat)} · C {fmt(entry.carbs)} · F {fmt(entry.fiber)} · P {fmt(entry.protein)}
+											</small>
+										</div>
 										<DropdownMenu.Root>
 											<DropdownMenu.Trigger>
 												{#snippet child({ props })}
