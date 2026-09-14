@@ -229,7 +229,8 @@
 	</CardContent>
 </Card>
 
-<Card>
+<!-- El margen deja sitio al FAB: sin él tapa el menú de la última comida -->
+<Card class="mb-12">
 	<CardContent>
 		<h2 class="mb-3 text-base font-semibold">Comidas ({diary.entries.length})</h2>
 		{#each groups as group}
