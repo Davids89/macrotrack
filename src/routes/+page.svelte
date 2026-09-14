@@ -292,11 +292,11 @@
 											<div class="flex items-baseline justify-between gap-2">
 												<strong class="min-w-0 truncate text-sm">{entry.name}</strong>
 												<small class="shrink-0 whitespace-nowrap text-xs text-muted-foreground">
-													{#if entry.units !== undefined}{fmt(entry.units)} ud · {/if}{fmt(entry.grams)} g · {fmt(entry.kcal)} kcal
+													{#if entry.units !== undefined}{fmt(entry.units)} ud · {/if}{fmt(entry.grams)} g
 												</small>
 											</div>
 											<small class="truncate text-xs text-muted-foreground">
-												G {fmt(entry.fat)} · C {fmt(entry.carbs)} · F {fmt(entry.fiber)} · P {fmt(entry.protein)}
+												{fmt(entry.kcal)} kcal · G {fmt(entry.fat)} · C {fmt(entry.carbs)} · F {fmt(entry.fiber)} · P {fmt(entry.protein)}
 											</small>
 										</div>
 										<DropdownMenu.Root>
