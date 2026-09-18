@@ -1,6 +1,7 @@
 <script lang="ts">
-	import type { Food, Recipe, RecipeItem } from '$lib/db';
-	import { fmt } from '$lib/format';
+	import { MEAL_TYPES, type Food, type MealType, type Recipe, type RecipeItem } from '$lib/db';
+	import { fmt, toNumber } from '$lib/format';
+	import { MACROS } from '$lib/macros';
 	import { recipeGrams, recipeItem, recipeTotals } from '$lib/recipes';
 	import FoodPicker from './FoodPicker.svelte';
 	import { Button } from '$lib/components/ui/button';
@@ -15,14 +16,26 @@
 	}: {
 		initial?: Recipe;
 		submitLabel?: string;
-		onSave: (data: { name: string; items: RecipeItem[] }) => void;
+		onSave: (data: { name: string; mealTypes: MealType[]; items: RecipeItem[] }) => void;
 	} = $props();
 
 	// El padre recrea el formulario con {#key}, así que basta con el valor inicial.
 	// svelte-ignore state_referenced_locally
 	let name = $state(initial?.name ?? '');
 	// svelte-ignore state_referenced_locally
+	let mealTypes = $state<MealType[]>([...(initial?.mealTypes ?? [])]);
+	// svelte-ignore state_referenced_locally
 	let items = $state<RecipeItem[]>(initial?.items.map((item) => ({ ...item })) ?? []);
+	/** Receta al vuelo: las macros del plato entero, sin pesar ingredientes. */
+	let manual = $state(false);
+	let portion = $state('100');
+	let macros = $state({ kcal: '', fat: '', carbs: '', fiber: '', protein: '' });
+
+	const num = (value: string) => toNumber(value) || 0;
+
+	function toggleMeal(key: MealType) {
+		mealTypes = mealTypes.includes(key) ? mealTypes.filter((m) => m !== key) : [...mealTypes, key];
+	}
 	let error = $state('');
 
 	const totals = $derived(recipeTotals(items));
@@ -38,11 +51,27 @@
 			error = 'Ponle un nombre a la receta';
 			return;
 		}
-		if (items.length === 0) {
+		const grams = num(portion);
+		if (manual && !(grams > 0)) {
+			error = 'Pon cuánto pesa la ración';
+			return;
+		}
+		if (!manual && items.length === 0) {
 			error = 'Añade al menos un alimento';
 			return;
 		}
-		onSave({ name: trimmed, items: $state.snapshot(items) });
+		const saved = manual
+			? [{
+					name: trimmed,
+					grams,
+					kcal: num(macros.kcal),
+					fat: num(macros.fat),
+					carbs: num(macros.carbs),
+					fiber: num(macros.fiber),
+					protein: num(macros.protein)
+				}]
+			: $state.snapshot(items);
+		onSave({ name: trimmed, mealTypes: $state.snapshot(mealTypes), items: saved });
 	}
 </script>
 
@@ -55,8 +84,45 @@
 			Una receta es una ración: pon las cantidades de un solo plato.
 		</p>
 	</div>
-	<FoodPicker onAdd={addFood} showMealType={false} />
-	{#if items.length > 0}
+	<div>
+		<Label class="mb-1 block">Momento del día</Label>
+		<div class="flex flex-wrap gap-1">
+			{#each MEAL_TYPES as type}
+				<Button
+					variant={mealTypes.includes(type.key) ? 'default' : 'outline'}
+					size="sm"
+					aria-pressed={mealTypes.includes(type.key)}
+					onclick={() => toggleMeal(type.key)}
+				>{type.label}</Button>
+			{/each}
+		</div>
+		<p class="mt-1 text-xs text-muted-foreground">
+			Opcional: si no marcas ninguno, la receta aparece en todas las comidas.
+		</p>
+	</div>
+	<Button variant="outline" size="sm" onclick={() => (manual = !manual)}>
+		{manual ? 'Componer con alimentos' : 'Meter macros a mano'}
+	</Button>
+	{#if manual}
+		<div>
+			<Label class="mb-1 block">Peso de la ración (g)</Label>
+			<Input type="text" bind:value={portion} inputmode="decimal" />
+			<p class="mt-1 text-xs text-muted-foreground">
+				Si no lo sabes, deja 100: solo sirve para escalar porciones.
+			</p>
+		</div>
+		<div class="grid grid-cols-2 gap-2">
+			{#each MACROS as macro}
+				<div>
+					<Label class="mb-1 block">{macro.label} ({macro.unit})</Label>
+					<Input type="text" bind:value={macros[macro.key]} inputmode="decimal" />
+				</div>
+			{/each}
+		</div>
+	{:else}
+		<FoodPicker onAdd={addFood} showMealType={false} />
+	{/if}
+	{#if !manual && items.length > 0}
 		<ul>
 			{#each items as item, index (index)}
 				<li class="flex items-center justify-between gap-2 border-b border-border py-2 last:border-b-0">
