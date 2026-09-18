@@ -1,7 +1,7 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
 	import { db, MEAL_TYPES, suggestMealType, type MealType, type Recipe, type RecipeItem } from '$lib/db';
-	import { fmt, toNumber } from '$lib/format';
+	import { fmt, fold, toNumber } from '$lib/format';
 	import { matchesMeal, mostUsed, portionGrams, recipeGrams, recipeTotals } from '$lib/recipes';
 	import { Button } from '$lib/components/ui/button';
 	import { Input } from '$lib/components/ui/input';
@@ -28,22 +28,27 @@
 	let part = $state('1');
 	let parts = $state('1');
 	let creating = $state(false);
-	let selectedId = $state('');
+	let query = $state('');
 
 	const visible = $derived(recipes.filter((recipe) => matchesMeal(recipe, mealType || undefined)));
 	const top = $derived(mostUsed(visible));
 
-	// El selector manda: elegir en él es lo mismo que pulsar la receta en «más usadas».
-	// Y si cambias el tipo de comida, la receta elegida que ya no encaja se suelta.
-	$effect(() => {
-		const recipe = visible.find((r) => String(r.id) === selectedId);
-		if (recipe) {
-			if (recipe.id !== selected?.id) pick(recipe);
-		} else if (selected) {
-			selected = null;
-			selectedId = '';
-		}
+	// Con una receta elegida el buscador muestra su nombre; solo vuelve a listar al escribir.
+	const results = $derived.by(() => {
+		if (selected && query === selected.name) return [];
+		const q = fold(query);
+		return (q ? visible.filter((recipe) => fold(recipe.name).includes(q)) : visible).slice(0, 8);
 	});
+
+	// Si cambias el tipo de comida, la receta elegida que ya no encaja se suelta.
+	$effect(() => {
+		if (selected && !visible.some((recipe) => recipe.id === selected!.id)) clear();
+	});
+
+	function clear() {
+		selected = null;
+		query = '';
+	}
 
 	/** Porciones habituales de una receta que se come en varios días. */
 	const PRESETS = [
@@ -79,7 +84,7 @@
 
 	function pick(recipe: Recipe) {
 		selected = recipe;
-		selectedId = String(recipe.id);
+		query = recipe.name;
 		part = '1';
 		parts = '1';
 		grams = String(Math.round(recipeGrams(recipe.items)));
@@ -135,20 +140,32 @@
 			Cada receta entra como una sola comida; elige qué parte tomaste (p. ej. ⅓ del gazpacho).
 		</p>
 		<div>
-			<Label class="mb-1 block">Receta</Label>
-			<Select.Root bind:value={selectedId}>
-				<Select.Trigger class="w-full">
-					<SelectPrimitive.Value placeholder="Elige una receta" />
-				</Select.Trigger>
-				<Select.Content>
-					{#each visible as recipe (recipe.id)}
-						<Select.Item value={String(recipe.id)} label={recipe.name}>
-							<span class="min-w-0 flex-1 truncate">{recipe.name}</span>
-							<span class="shrink-0 text-xs text-muted-foreground">{summary(recipe)}</span>
-						</Select.Item>
+			<Label class="mb-1 block" for="recipe-search">Receta</Label>
+			<Input
+				id="recipe-search"
+				type="search"
+				placeholder="Elige o busca una receta…"
+				bind:value={query}
+				oninput={() => {
+					if (selected && query !== selected.name) selected = null;
+				}}
+			/>
+			{#if results.length > 0}
+				<ul class="mt-1 flex max-h-64 flex-col gap-1 overflow-auto">
+					{#each results as recipe (recipe.id)}
+						<li>
+							<Button
+								variant="ghost"
+								class="h-auto min-h-8 w-full items-start justify-between gap-2 py-2 font-normal"
+								onclick={() => pick(recipe)}
+							>
+								<span class="min-w-0 flex-1 whitespace-normal break-words text-left">{recipe.name}</span>
+								<span class="shrink-0 text-xs text-muted-foreground">{summary(recipe)}</span>
+							</Button>
+						</li>
 					{/each}
-				</Select.Content>
-			</Select.Root>
+				</ul>
+			{/if}
 		</div>
 		{#if top.length > 0}
 			<div class="flex flex-wrap gap-1.5">
